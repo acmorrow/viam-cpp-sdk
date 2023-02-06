@@ -18,14 +18,7 @@ add_executable(example_dial
   example_dial.cc
 )
 
-target_include_directories(example_dial
-  PUBLIC ${PROJECT_SOURCE_DIR}/src
-  PUBLIC ${PROJECT_SOURCE_DIR}/src/gen
-)
-
 target_link_libraries(example_dial
-  ${viam_rust_utils_lib}
-  gRPC::grpc++
   viamcpp
 )
 

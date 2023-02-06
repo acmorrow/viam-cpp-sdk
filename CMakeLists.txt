@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: [required] Buf (re)-generation
-# TODO: [required] Fixup viam_rust_utils in install dir
-# TODO: [urgent] Header installation
-# TODO: [urgent] libviam_rust_utils handling
-# TODO: [urgent] Finding external projects vs building in (e.g grpc)
+# TODO: [required] libviam_rust_utils handling
+# TODO: [required] Header installation
+# TODO: Finding external projects vs building in (e.g grpc)
 # TODO: Runtime paths and make BUILD_SHARED_LIBS work
-# TODO: CMake version minimum (would like to do latest, but can we)
 # TODO: Check required versions of third party libraries
 # TODO: Compiler minima
 # TODO: Better clang-format integration (versions, dependencies, only changed, etc.)
 # TODO: Version from git describe?
+# TODO: Export macros and visibilty annotations
 
 
 # This is a tricky decision. If we set this too old, we lose access to
