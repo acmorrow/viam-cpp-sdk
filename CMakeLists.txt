@@ -13,6 +13,7 @@
 # limitations under the License.
 
 # TODO: [required] Buf (re)-generation
+# TODO: [required] Fixup viam_rust_utils in install dir
 # TODO: [urgent] Header installation
 # TODO: [urgent] libviam_rust_utils handling
 # TODO: [urgent] Finding external projects vs building in (e.g grpc)
@@ -28,26 +29,12 @@
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
 
-# TODO: Is this needed? If so, doc it, otherwise remove it.
-if(POLICY CMP0042)
-  cmake_policy(SET CMP0042 NEW)
-endif()
-
-
 # Identify the project.
 project(viam-cpp-sdk
   VERSION 0.0.0
   DESCRIPTION "Viam Robotics C++ SDK"
   HOMEPAGE_URL https://github.com/viamrobotics/viam-cpp-sdk
   LANGUAGES CXX
-)
-
-
-# Inject the location of our own CMake utilities (e.g. for bufbuilder
-# or a better clang-format tool)
-set(CMAKE_MODULE_PATH
-  ${CMAKE_MODULE_PATH}
-  ${PROJECT_SOURCE_DIR}/etc/cmake
 )
 
 
@@ -66,26 +53,14 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 
-# Configure options for dynamic linking
-# TODO: Do we want to default to shared libraries? Also see top-level
-# TODO about whether we should build *both* if shared librares is ON
-option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-
-# Allow binaries in the build tree to be run meaningfully when
-# BUILD_SHARED_LIBS=ON
-set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-
-# Ensure that RPATHs required to reach external dependencies
-# propagate into the instalation
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-
 # Manage the rust utils library. For now, we require a
 # `viam_rust_utils` in the root of the tree. The user is responsible
 # for providing it. We then stage it into the installation.
 #
 # TODO: Error out if this glob doesn't match anything
 # TODO: Consider downloading this library for the user if not present
+# TODO: Make it `IMPORT`ed
+# TODO: Fixup runtime paths
 file(GLOB viam_rust_utils_lib ${PROJECT_SOURCE_DIR}/libviam_rust_utils*.*)
 install(
   FILES ${viam_rust_utils_lib}
