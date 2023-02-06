@@ -25,8 +25,15 @@
 # TODO: Version from git describe?
 
 
-# Require CMake 3.18, which is the system version in Debian Bullseye.
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+# This is a tricky decision. If we set this too old, we lose access to
+# modern CMake facilities that we want to be able to use, like file
+# sets. If we set it too new, then the system CMake can't be used to
+# build the product. Here, we make an opinionated choice to require
+# the very latest stable CMake as of this writing, arguing that for
+# most uses of this product, it is expected to be cross-compiling for
+# the target platform on a development system, meaning that we are not
+# constrained by the version of CMake available on target systems.
+cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
 
 # Identify the project.
@@ -43,10 +50,13 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 
-# Produce GNU-style variables for installation, and default
-# the installation directory to be local to the build. If you
-# intend to install elsewhere, pass an explicit argument
-# to CMAKE_INSTALL_PREFIX on the command line.
+# Produce GNU-style variables for installation, and default the
+# installation directory to be local to the build. If you intend to
+# install elsewhere, pass an explicit argument to CMAKE_INSTALL_PREFIX
+# on the command line:
+#
+# cmake ... -DCMAKE_INSTALL_PREFIX=$HOME/opt
+#
 include(GNUInstallDirs)
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "..." FORCE)
@@ -59,8 +69,8 @@ endif()
 #
 # TODO: Error out if this glob doesn't match anything
 # TODO: Consider downloading this library for the user if not present
-# TODO: Make it `IMPORT`ed
-# TODO: Fixup runtime paths
+# TODO: Make it an `IMPORT`ed library target
+# TODO: Fixup runtime paths at install time.
 file(GLOB viam_rust_utils_lib ${PROJECT_SOURCE_DIR}/libviam_rust_utils*.*)
 install(
   FILES ${viam_rust_utils_lib}
@@ -77,14 +87,14 @@ install(FILES
 )
 
 
-# Add a `format` target. This is not a great way to go about it, but
-# it is enough to get started and match what the existing Makefile
-# based setup did. A better way (perhaps) would be to add
-# `clang-format` as an `IMPORT`ed executable and make this target
-# dependent on it (and, probably, any .clang-format files). Then use
-# CMake to find the sources rather than a shell script, and add them
-# as dependencies so that the `format` target is a no-op if nothing is
-# out of date.
+# Add `format` and `check-format` targets to run clang-format or just
+# check for errors. This is not a great way to go about it, but it is
+# enough to get started and match what the existing Makefile based
+# setup did. A better way (perhaps) would be to add `clang-format` as
+# an `IMPORT`ed executable and make this target dependent on it (and,
+# probably, any .clang-format files). Then use CMake to find the
+# sources rather than a shell script, and add them as dependencies so
+# that the `format` target is a no-op if nothing is out of date.
 add_custom_target(
   format
   COMMAND ${PROJECT_SOURCE_DIR}/bin/run-clang-format.sh
