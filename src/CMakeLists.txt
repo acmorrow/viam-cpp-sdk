@@ -98,23 +98,37 @@ endif(VIAMCPPSDK_USE_DYNAMIC_PROTOS)
 # physical refactoring that can be eliminated.
 set(PROTO_GEN_DIR ${PROTO_GEN_DIR} CACHE INTERNAL "")
 
+
+# Declare the viamcpp library, and attach sources,
+# headers for installation
 add_library(viamcpp)
 
-target_sources(viamcpp PRIVATE
-  ${PROTO_GEN_DIR}/gen/common/v1/common.grpc.pb.cc
-  ${PROTO_GEN_DIR}/gen/common/v1/common.pb.cc
-  ${PROTO_GEN_DIR}/gen/google/api/annotations.pb.cc
-  ${PROTO_GEN_DIR}/gen/google/api/http.pb.cc
-  ${PROTO_GEN_DIR}/gen/robot/v1/robot.pb.cc
-  ${PROTO_GEN_DIR}/gen/robot/v1/robot.grpc.pb.cc
-  common/proto_type.cpp
-  common/utils.cpp
-  components/component_base.cpp
-  components/resource_manager.cpp
-  registry/registry.cpp
-  robot/client.cpp
-  rpc/dial.cpp
-)
+target_sources(viamcpp
+  PRIVATE
+    ${PROTO_GEN_DIR}/gen/common/v1/common.grpc.pb.cc
+    ${PROTO_GEN_DIR}/gen/common/v1/common.pb.cc
+    ${PROTO_GEN_DIR}/gen/google/api/annotations.pb.cc
+    ${PROTO_GEN_DIR}/gen/google/api/http.pb.cc
+    ${PROTO_GEN_DIR}/gen/robot/v1/robot.pb.cc
+    ${PROTO_GEN_DIR}/gen/robot/v1/robot.grpc.pb.cc
+    common/proto_type.cpp
+    common/utils.cpp
+    components/component_base.cpp
+    components/resource_manager.cpp
+    registry/registry.cpp
+    robot/client.cpp
+    rpc/dial.cpp
+  PUBLIC FILE_SET viamcpp_public_includes TYPE HEADERS FILES
+    common/proto_type.hpp
+    common/utils.hpp
+    components/component_base.hpp
+    components/resource_manager.hpp
+    components/service_base.hpp
+    registry/registry.hpp
+    robot/client.hpp
+    robot/service.hpp
+    rpc/dial.hpp
+  )
 
 target_include_directories(viamcpp
   PUBLIC ${PROJECT_SOURCE_DIR}/src
@@ -130,5 +144,5 @@ target_link_libraries(viamcpp
 install(
   TARGETS viamcpp
   LIBRARY COMPONENT runtime
-  PUBLIC_HEADER COMPONENT dev
+  FILE_SET viamcpp_public_includes COMPONENT dev
 )
