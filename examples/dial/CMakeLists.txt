@@ -24,12 +24,12 @@ target_include_directories(example_dial
 )
 
 target_link_libraries(example_dial
-  viamcpp
-  gRPC::grpc++
   ${viam_rust_utils_lib}
+  gRPC::grpc++
+  viamcpp
 )
 
 install(
   TARGETS example_dial
-  COMPONENT blargle
+  COMPONENT examples
 )

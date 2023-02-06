@@ -12,32 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Header / License / viam_rust_utils intsallation
-# TODO: Buf (re)-generation
-# TODO: Clang-format target?
-# TODO: Finding external projects
-# TODO: Examples use the library
-# TODO: Runtime paths
+# TODO: [required] Clang-format target?
+# TODO: [required] Buf (re)-generation
+# TODO: Header installation
+# TODO: libviam_rust_utils handling
+# TODO: Runtime paths and make BUILD_SHARED_LIBS work
+# TODO: Finding external projects vs building in (e.g grpc)
+# TODO: CMake version minimum (would like to do latest, but can we)
 # TODO: Check required versions of third party libraries
 # TODO: Compiler minima
 # TODO: Version from git describe?
-# TODO: ld: warning: directory not found for option '-F/Library/Developer/CommandLineTools/SDKs/MacOSX13.sdk/System/Library/Frameworks'
-# TODO: static/dynamic/both?
 
 
 # Require CMake 3.18, which is the system version in Debian Bullseye.
 cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
 
+
+# TODO: Is this needed? If so, doc it, otherwise remove it.
 if(POLICY CMP0042)
   cmake_policy(SET CMP0042 NEW)
 endif()
 
-project(VIAM_CPP_SDK
+
+# Identify the project.
+project(viam-cpp-sdk
   VERSION 0.0.0
   DESCRIPTION "Viam Robotics C++ SDK"
   HOMEPAGE_URL https://github.com/viamrobotics/viam-cpp-sdk
   LANGUAGES CXX
 )
+
+
+# Inject the location of our own CMake utilities (e.g. for bufbuilder)
+set(CMAKE_MODULE_PATH
+  ${CMAKE_MODULE_PATH}
+  ${PROJECT_SOURCE_DIR}/etc/cmake
+)
+
+
+# Enforce the C++ standard, and disable extensions
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 
 # Produce GNU-style variables for installation, and default
 # the installation directory to be local to the build. If you
@@ -48,10 +64,8 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "..." FORCE)
 endif()
 
-# Enforce the C++ standard, and disable extensions
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Configure options for dynamic linking
 # TODO: Do we want to default to shared libraries? Also see top-level
 # TODO about whether we should build *both* if shared librares is ON
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
@@ -63,8 +77,10 @@ set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 # propagate into the instalation
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
-# For now, we require a `viam_rust_utils` in the root of the tree. The user
-# is responsible for providing it. We then stage it into the installation.
+
+# Manage the rust utils library. For now, we require a
+# `viam_rust_utils` in the root of the tree. The user is responsible
+# for providing it. We then stage it into the installation.
 #
 # TODO: Error out if this glob doesn't match anything
 # TODO: Consider downloading this library for the user if not present
@@ -75,7 +91,15 @@ install(
   COMPONENT runtime
 )
 
-add_subdirectory(src)
 
-# TODO: Push examples under `src`?
+# Install the license file
+install(FILES
+  LICENSE
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME}
+  COMPONENT runtime
+)
+
+
+# Pull in our subdirectories
+add_subdirectory(src)
 add_subdirectory(examples)

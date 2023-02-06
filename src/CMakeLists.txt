@@ -18,24 +18,25 @@ find_package(Boost REQUIRED
 )
 
 add_library(viamcpp
-  ${PROJECT_SOURCE_DIR}/src/gen/common/v1/common.grpc.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/gen/common/v1/common.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/gen/google/api/annotations.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/gen/google/api/http.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/gen/robot/v1/robot.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/gen/robot/v1/robot.grpc.pb.cc
-  ${PROJECT_SOURCE_DIR}/src/common/proto_type.cpp
-  ${PROJECT_SOURCE_DIR}/src/common/utils.cpp
-  ${PROJECT_SOURCE_DIR}/src/components/component_base.cpp
-  ${PROJECT_SOURCE_DIR}/src/components/resource_manager.cpp
-  ${PROJECT_SOURCE_DIR}/src/registry/registry.cpp
-  ${PROJECT_SOURCE_DIR}/src/robot/client.cpp
-  ${PROJECT_SOURCE_DIR}/src/rpc/dial.cpp
+  gen/common/v1/common.grpc.pb.cc
+  gen/common/v1/common.pb.cc
+  gen/google/api/annotations.pb.cc
+  gen/google/api/http.pb.cc
+  gen/robot/v1/robot.pb.cc
+  gen/robot/v1/robot.grpc.pb.cc
+  common/proto_type.cpp
+  common/utils.cpp
+  components/component_base.cpp
+  components/resource_manager.cpp
+  registry/registry.cpp
+  robot/client.cpp
+  rpc/dial.cpp
 )
 
-#set_target_properties(viamcp
-#  PROPERTIES PUBLIC_HEADER "some.h;another.h"
-#)
+# TODO: This doesn't install with the right path
+# set_target_properties(viamcpp
+#   PROPERTIES PUBLIC_HEADER "robot/client.hpp"
+# )
 
 target_include_directories(viamcpp
   PUBLIC ${PROJECT_SOURCE_DIR}/src
@@ -53,8 +54,3 @@ install(
   LIBRARY COMPONENT runtime
   PUBLIC_HEADER COMPONENT dev
 )
-
-#install(
-#  TARGETS viamcpp
-#  PUBLIC_HEADER DESTINATION some/includepath
-#)
