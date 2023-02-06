@@ -1,11 +1,11 @@
-#include <istream>
-#include <string>
-
-#include <boost/none.hpp>
-#include <boost/optional.hpp>
 #include <grpcpp/channel.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+
+#include <boost/none.hpp>
+#include <boost/optional.hpp>
+#include <istream>
+#include <string>
 
 #include "robot/v1/robot.grpc.pb.h"
 #include "robot/v1/robot.pb.h"

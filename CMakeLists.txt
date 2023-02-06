@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: [required] Clang-format target?
 # TODO: [required] Buf (re)-generation
-# TODO: Header installation
-# TODO: libviam_rust_utils handling
+# TODO: [urgent] Header installation
+# TODO: [urgent] libviam_rust_utils handling
+# TODO: [urgent] Finding external projects vs building in (e.g grpc)
 # TODO: Runtime paths and make BUILD_SHARED_LIBS work
-# TODO: Finding external projects vs building in (e.g grpc)
 # TODO: CMake version minimum (would like to do latest, but can we)
 # TODO: Check required versions of third party libraries
 # TODO: Compiler minima
+# TODO: Better clang-format integration (versions, dependencies, only changed, etc.)
 # TODO: Version from git describe?
 
 
@@ -43,7 +43,8 @@ project(viam-cpp-sdk
 )
 
 
-# Inject the location of our own CMake utilities (e.g. for bufbuilder)
+# Inject the location of our own CMake utilities (e.g. for bufbuilder
+# or a better clang-format tool)
 set(CMAKE_MODULE_PATH
   ${CMAKE_MODULE_PATH}
   ${PROJECT_SOURCE_DIR}/etc/cmake
@@ -70,7 +71,8 @@ endif()
 # TODO about whether we should build *both* if shared librares is ON
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
-# Allow binaries in the build tree to be run meaningfully when BUILD_SHARED_LIBS=ON
+# Allow binaries in the build tree to be run meaningfully when
+# BUILD_SHARED_LIBS=ON
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 # Ensure that RPATHs required to reach external dependencies
@@ -97,6 +99,28 @@ install(FILES
   LICENSE
   DESTINATION ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME}
   COMPONENT runtime
+)
+
+
+# Add a `format` target. This is not a great way to go about it, but
+# it is enough to get started and match what the existing Makefile
+# based setup did. A better way (perhaps) would be to add
+# `clang-format` as an `IMPORT`ed executable and make this target
+# dependent on it (and, probably, any .clang-format files). Then use
+# CMake to find the sources rather than a shell script, and add them
+# as dependencies so that the `format` target is a no-op if nothing is
+# out of date.
+add_custom_target(
+  format
+  COMMAND ${PROJECT_SOURCE_DIR}/bin/run-clang-format.sh
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+)
+
+add_custom_target(
+  check-format
+  COMMAND ${PROJECT_SOURCE_DIR}/bin/run-clang-format.sh --dry-run -Werror
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  USES_TERMINAL
 )
 
 
