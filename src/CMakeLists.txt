@@ -148,7 +148,7 @@ target_include_directories(viamcpp
 target_link_libraries(viamcpp
   PUBLIC gRPC::grpc++
   PRIVATE ${Boost_LOG_LIBRARY}
-  PRIVATE ${viam_rust_utils_lib}
+  PRIVATE viam_rust_utils
 )
 
 install(

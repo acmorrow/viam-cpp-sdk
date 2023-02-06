@@ -40,7 +40,7 @@ target_include_directories(example_echo
 # dependencis from viamcpp, so we need to be explicit about them.
 target_link_libraries(example_echo
   gRPC::grpc++
-  ${viam_rust_utils_lib}
+  viam_rust_utils
 )
 
 install(

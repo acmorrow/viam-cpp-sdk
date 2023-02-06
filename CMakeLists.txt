@@ -61,19 +61,41 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 
-# Manage the rust utils library. For now, we require a
-# `viam_rust_utils` in the root of the tree. The user is responsible
-# for providing it. We then stage it into the installation.
+# See if the user provided a libviam_rust_utils in the root of the
+# tree. If not, try to download the latest.
 #
-# TODO: Error out if this glob doesn't match anything
-# TODO: Consider downloading this library for the user if not present
-# TODO: Make it an `IMPORT`ed library target
 # TODO: Fixup runtime paths at install time.
-file(GLOB viam_rust_utils_lib ${PROJECT_SOURCE_DIR}/libviam_rust_utils*.*)
+# TODO: This should be pushed down into a tool
+file(GLOB lib_viam_rust_utils ${PROJECT_SOURCE_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}viam_rust_utils*${CMAKE_SHARED_LIBRARY_SUFFIX})
+if (NOT lib_viam_rust_utils)
+  set(lvru_system_name ${CMAKE_SYSTEM_NAME})
+  if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(lvru_system_name "macosx")
+  endif()
+  file(
+    DOWNLOAD
+    https://github.com/viamrobotics/rust-utils/releases/latest/download/libviam_rust_utils-${lvru_system_name}_${CMAKE_SYSTEM_PROCESSOR}.dylib
+    ${CMAKE_SHARED_LIBRARY_PREFIX}viam_rust_utils${CMAKE_SHARED_LIBRARY_SUFFIX}
+    STATUS lvru_status
+  )
+  list(GET lvru_status 0 lvru_status_code)
+  list(GET lvru_status 1 lvru_status_string)
+
+  if(NOT lvru_status_code EQUAL 0)
+    message(FATAL_ERROR "No local viam_rust_utils found and failed to download: ${lvru_status_string}")
+  endif()
+
+  set(lib_viam_rust_utils ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}viam_rust_utils${CMAKE_SHARED_LIBRARY_SUFFIX})
+endif()
+
+add_library(viam_rust_utils SHARED IMPORTED)
+set_property(TARGET viam_rust_utils PROPERTY IMPORTED_LOCATION ${lib_viam_rust_utils})
+
 install(
-  FILES ${viam_rust_utils_lib}
+  FILES ${lib_viam_rust_utils}
   TYPE LIB
   COMPONENT runtime
+  RENAME ${CMAKE_SHARED_LIBRARY_PREFIX}viam_rust_utils${CMAKE_SHARED_LIBRARY_SUFFIX}
 )
 
 
