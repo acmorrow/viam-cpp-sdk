@@ -13,11 +13,11 @@
 # limitations under the License.
 
 # TODO: [required] libviam_rust_utils handling
-# TODO: [required] Header installation
-# TODO: Finding external projects vs building in (e.g grpc)
+# TODO: [required] Dockerfile
 # TODO: Runtime paths and make BUILD_SHARED_LIBS work
 # TODO: Check required versions of third party libraries
 # TODO: Compiler minima
+# TODO: Finding external projects vs building in (e.g grpc)
 # TODO: Better clang-format integration (versions, dependencies, only changed, etc.)
 # TODO: Version from git describe?
 # TODO: Export macros and visibilty annotations

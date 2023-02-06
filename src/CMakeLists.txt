@@ -118,16 +118,26 @@ target_sources(viamcpp
     registry/registry.cpp
     robot/client.cpp
     rpc/dial.cpp
-  PUBLIC FILE_SET viamcpp_public_includes TYPE HEADERS FILES
-    common/proto_type.hpp
-    common/utils.hpp
-    components/component_base.hpp
-    components/resource_manager.hpp
-    components/service_base.hpp
-    registry/registry.hpp
-    robot/client.hpp
-    robot/service.hpp
-    rpc/dial.hpp
+  PUBLIC FILE_SET viamcpp_public_includes TYPE HEADERS
+    FILES
+      common/proto_type.hpp
+      common/utils.hpp
+      components/component_base.hpp
+      components/resource_manager.hpp
+      components/service_base.hpp
+      registry/registry.hpp
+      robot/client.hpp
+      robot/service.hpp
+      rpc/dial.hpp
+  PUBLIC FILE_SET viamcpp_public_pb_includes TYPE HEADERS
+    BASE_DIRS
+      ${CMAKE_CURRENT_BINARY_DIR}/gen
+    FILES
+      ${PROTO_GEN_DIR}/gen/google/api/annotations.pb.h
+      ${PROTO_GEN_DIR}/gen/google/api/http.pb.h
+      ${PROTO_GEN_DIR}/gen/common/v1/common.pb.h
+      ${PROTO_GEN_DIR}/gen/robot/v1/robot.grpc.pb.h
+      ${PROTO_GEN_DIR}/gen/robot/v1/robot.pb.h
   )
 
 target_include_directories(viamcpp
@@ -145,4 +155,5 @@ install(
   TARGETS viamcpp
   LIBRARY COMPONENT runtime
   FILE_SET viamcpp_public_includes COMPONENT dev
+  FILE_SET viamcpp_public_pb_includes COMPONENT dev
 )
