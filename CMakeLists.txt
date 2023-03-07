@@ -150,8 +150,8 @@ if("${isSystemDir}" STREQUAL "-1")
   file(RELATIVE_PATH BINTOPREFIXRELPATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR} ${CMAKE_INSTALL_PREFIX})
   file(RELATIVE_PATH PREFIXTOLIBRELPATH ${CMAKE_INSTALL_PREFIX} ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
   if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    set(CMAKE_INSTALL_NAME_DIR "@rpath/${PREFIXTOLIBRELPATH}")
-    list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/${BINTOPREFIXRELPATH}")
+    set(CMAKE_INSTALL_NAME_DIR "@rpath")
+    list(PREPEND CMAKE_INSTALL_RPATH "@loader_path/${BINTOPREFIXRELPATH}/${PREFIXTOLIBRELPATH}")
   else()
     list(PREPEND CMAKE_INSTALL_RPATH "$ORIGIN/${BINTOPREFIXRELPATH}/${PREFIXTOLIBRELPATH}")
   endif()
@@ -209,7 +209,22 @@ else()
 
 endif()
 
+add_custom_target(
+  update-rust-utils-lib
+  DEPENDS ${viam_rust_utils_file}
+)
+
+# Work around RSDK-XXX by explicitly configuring the install name and rpath for the dylib.
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  add_custom_command(
+    TARGET update-rust-utils-lib
+    COMMAND ${CMAKE_INSTALL_NAME_TOOL} -id ${CMAKE_INSTALL_NAME_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}viam_rust_utils${CMAKE_SHARED_LIBRARY_SUFFIX} ${viam_rust_utils_file}
+    MAIN_DEPENDENCY ${viam_rust_utils_file}
+  )
+endif()
+
 add_library(viam_rust_utils SHARED IMPORTED)
+add_dependencies(viam_rust_utils update-rust-utils-lib)
 
 target_link_directories(viam_rust_utils
   INTERFACE
@@ -218,6 +233,7 @@ target_link_directories(viam_rust_utils
 )
 
 set_property(TARGET viam_rust_utils PROPERTY IMPORTED_LOCATION ${viam_rust_utils_file})
+set_property(TARGET viam_rust_utils PROPERTY IMPORTED_NO_SONAME true)
 
 install(
   IMPORTED_RUNTIME_ARTIFACTS viam_rust_utils
