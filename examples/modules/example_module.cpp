@@ -2,6 +2,7 @@
 #include <component/generic/v1/generic.grpc.pb.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/server_context.h>
+#include <pthread.h>
 #include <robot/v1/robot.pb.h>
 #include <signal.h>
 
@@ -65,27 +66,22 @@ class MyModule : public GenericService::Service, public ComponentBase {
 };
 
 int MyModule::which = 0;
-std::shared_ptr<ModuleService_> my_mod;
 
-void signal_handler(int signum) {
-    my_mod->close();
-}
 
 int main(int argc, char** argv) {
+    sigset_t sigset;
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGINT);
+    sigaddset(&sigset, SIGTERM);
+    pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
     if (argc != 2) {
         throw "need socket path as command line argument";
     }
 
-    // TODO(RSDK-1920) This is still causing non-graceful shutdown. Figure out why, and fix.
-    struct sigaction sig_handler;
-    sig_handler.sa_handler = signal_handler;
-    sigaction(SIGTERM, &sig_handler, nullptr);
-    sigemptyset(&sig_handler.sa_mask);
-    sig_handler.sa_flags = 0;
-
     Subtype generic = Generic::subtype();
-    my_mod = std::make_shared<ModuleService_>(argv[1]);
     Model m("acme", "demo", "printer");
+
     std::shared_ptr<ModelRegistration> rr = std::make_shared<ModelRegistration>(
         ResourceType("MyModule"),
         generic,
@@ -105,10 +101,28 @@ int main(int argc, char** argv) {
         });
 
     Registry::register_resource(rr);
-    my_mod->add_model_from_registry(generic, m);
 
-    my_mod->start();
-    Server::start();
-    Server::wait();
+    // The `ModuleService_` must outlive the Server, so the
+    // declaration order here matters.
+    auto my_mod = std::make_shared<ModuleService_>(argv[1]);
+    Server server;
+
+    my_mod->add_model_from_registry(&server, generic, m);
+    my_mod->start(&server);
+
+    std::thread signal_wait_thread([&server, &sigset]() {
+        int sig = 0;
+        std::cout << "Wwaiting for signal\n";
+        auto result = sigwait(&sigset, &sig);
+        std::cout << "Signaled!\n";
+        server.shutdown();
+        std::cout << "Server shutdown";
+    });
+
+    server.start();
+    server.wait();
+
+    signal_wait_thread.join();
+
     return 0;
 };
