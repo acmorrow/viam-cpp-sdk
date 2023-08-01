@@ -23,7 +23,7 @@ namespace sdk {
 
 namespace {
 
-constexpr bool kUseFlatTensors = false;
+constexpr bool kUseFlatTensors = true;
 
 }  // namespace
 
