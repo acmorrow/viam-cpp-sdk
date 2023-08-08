@@ -91,3 +91,26 @@ install(
   TARGETS example_mlmodelservice_triton
   COMPONENT examples
 )
+
+add_executable(fake_mlmodelservice_triton
+  fake_mlmodelservice_triton.cpp
+)
+
+target_include_directories(fake_mlmodelservice_triton
+  PRIVATE /opt/tritonserver/include/tritonserver
+)
+
+target_link_directories(fake_mlmodelservice_triton
+  PRIVATE /opt/tritonserver/lib
+)
+
+target_link_libraries(fake_mlmodelservice_triton
+  PRIVATE Threads::Threads
+  PRIVATE tritonserver
+  # PRIVATE viam-cpp-sdk::viamsdk
+)
+
+install(
+  TARGETS fake_mlmodelservice_triton
+  COMPONENT examples
+)

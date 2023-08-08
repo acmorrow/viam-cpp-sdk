@@ -40,6 +40,104 @@ namespace {
 namespace vsdk = ::viam::sdk;
 constexpr char service_name[] = "example_mlmodelservice_triton";
 
+// A namespace to bind unique_ptr and shared_ptr to the triton types in handy ways. Also
+// provides other helpers specialized to interacting with the triton API, like vtriton::call.
+namespace vtriton {
+
+// Declare this here so we can use it, but the implementation relies on subsequent specializaitons.
+template <typename Stdex = std::runtime_error, typename... Args>
+[[gnu::warn_unused_result]] constexpr auto call(TRITONSERVER_Error* (*fn)(Args... args)) noexcept;
+
+template <typename T>
+struct lifecycle_traits;
+
+template <typename T>
+struct traits {
+    using lifecycle = lifecycle_traits<T>;
+
+    struct deleter_type {
+        void operator()(T* t) const {
+            lifecycle::dtor(t);
+        }
+    };
+
+    using unique_ptr = std::unique_ptr<typename lifecycle::value_type, deleter_type>;
+};
+
+template <typename T>
+using unique_ptr = typename traits<T>::unique_ptr;
+
+template <typename T, class... Args>
+unique_ptr<T> make_unique(Args&&... args) {
+    using lifecycle = typename traits<T>::lifecycle;
+    using unique_ptr = unique_ptr<T>;
+    return unique_ptr(lifecycle::ctor(std::forward<Args>(args)...));
+}
+
+template <typename T>
+unique_ptr<T> take_unique(T* t) {
+    using lifecycle = typename traits<T>::lifecycle;
+    using unique_ptr = unique_ptr<T>;
+    return unique_ptr(t);
+}
+
+template <typename T, class... Args>
+std::shared_ptr<T> make_shared(Args&&... args) {
+    using lifecycle = typename traits<T>::lifecycle;
+    return std::shared_ptr<T>(lifecycle::ctor(std::forward<Args>(args)...), lifecycle::dtor);
+}
+
+template <>
+struct lifecycle_traits<TRITONSERVER_Error> {
+    using value_type = TRITONSERVER_Error;
+    static constexpr const auto ctor = TRITONSERVER_ErrorNew;
+    static constexpr const auto dtor = TRITONSERVER_ErrorDelete;
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_ServerOptions> {
+    using value_type = TRITONSERVER_ServerOptions;
+    template <class... Args>
+    static auto ctor(Args&&... args) {
+        TRITONSERVER_ServerOptions* opts = nullptr;
+        call(TRITONSERVER_ServerOptionsNew)(&opts, std::forward<Args>(args)...);
+        return opts;
+    };
+    static constexpr const auto dtor = TRITONSERVER_ServerOptionsDelete;
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_Server> {
+    using value_type = TRITONSERVER_Server;
+    template <class... Args>
+    static auto ctor(Args&&... args) {
+        TRITONSERVER_Server* server = nullptr;
+        call(TRITONSERVER_ServerNew)(&server, std::forward<Args>(args)...);
+        return server;
+    };
+    static constexpr const auto dtor = TRITONSERVER_ServerDelete;
+};
+
+template <typename Stdex = std::runtime_error, typename... Args>
+[[gnu::warn_unused_result]] constexpr auto call(TRITONSERVER_Error* (*fn)(Args... args)) noexcept {
+    // NOTE: The lack of perfect forwarding here is deliberate. The Triton API is in C. We want
+    // ordinary conversions (like std::string to const char*) to apply.
+    //
+    // TODO: Lies?
+    return [=](Args... args) {
+        const auto error = take_unique(fn(args...));
+        if (error) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Triton Server Error: " << TRITONSERVER_ErrorCodeString(error.get())
+                   << " - " << TRITONSERVER_ErrorMessage(error.get());
+            throw Stdex(buffer.str());
+        }
+    };
+}
+
+}  // namespace vtriton
+
 // An example MLModelService instance which runs many models via the
 // NVidia Triton Server API.x
 //
@@ -48,10 +146,22 @@ constexpr char service_name[] = "example_mlmodelservice_triton";
 class MLModelServiceTriton : public vsdk::MLModelService {
    public:
     explicit MLModelServiceTriton(vsdk::Dependencies dependencies,
-                                  vsdk::ResourceConfig configuration)
+                                  vsdk::ResourceConfig configuration) try
         : MLModelService(configuration.name()),
           state_(reconfigure_(std::move(dependencies), std::move(configuration))) {
-        std::cout << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'" << std::endl;
+        std::cout << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
+                  << std::endl;
+    } catch (...) {
+        std::cout << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP" << std::endl;
+        try {
+            throw;
+
+        } catch (const std::exception& xcp) {
+            std::cout
+                << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP (std::exception) "
+                << xcp.what() << std::endl;
+            throw;
+        }
     }
 
     ~MLModelServiceTriton() final {
@@ -159,7 +269,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
         // Just return a copy of our metadata from leased state.
         const auto state = lease_state_();
-                // This metadata is modelled on the results obtained from
+        // This metadata is modelled on the results obtained from
         // invoking `Metadata` on a instance of tflite_cpu configured
         // per the instructions and data at
         // https://github.com/viamrobotics/vision-service-examples/tree/aa4195485754151fccbfd61fbe8bed63db7f300f
@@ -306,8 +416,169 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
     static std::shared_ptr<state> reconfigure_(vsdk::Dependencies dependencies,
                                                vsdk::ResourceConfig configuration) {
-        //return std::make_shared<state>();
-        return std::make_shared<state>(std::move(dependencies), std::move(configuration));
+        // return std::make_shared<state>();
+        auto state =
+            std::make_shared<struct state>(std::move(dependencies), std::move(configuration));
+
+        // Validate that our dependencies (if any - we don't actually
+        // expect any for this service) exist. If we did have
+        // Dependencies this is where we would have an opportunity to
+        // downcast them to the right thing and store them in our
+        // state so we could use them as needed.
+        //
+        // TODO(RSDK-3601): Validating that dependencies are present
+        // should be handled by the ModuleService automatically,
+        // rather than requiring each component to validate the
+        // presence of dependencies.
+        for (const auto& kv : state->dependencies) {
+            if (!kv.second) {
+                std::ostringstream buffer;
+                buffer << service_name << ": Dependency "
+                       << "`" << kv.first.to_string() << "` was not found during (re)configuration";
+                throw std::invalid_argument(buffer.str());
+            }
+        }
+
+        const auto& attributes = state->configuration.attributes();
+
+        // Pull the model repository path out of the configuration.
+        auto model_repo_path = attributes->find("model_repository_path");
+        if (model_repo_path == attributes->end()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required parameter `model_repository_path` not found in configuration";
+            throw std::invalid_argument(buffer.str());
+        }
+
+        auto* const model_repo_path_string = model_repo_path->second->get<std::string>();
+        if (!model_repo_path_string || model_repo_path_string->empty()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required non-empty string parameter `model_repository_path` is either not "
+                      "a string "
+                      "or is an empty string";
+            throw std::invalid_argument(buffer.str());
+        }
+        // TODO(acm): Maybe validate path is a readable directory, if triton doesn't do so.
+        state->model_repo_path = std::move(*model_repo_path_string);
+
+        // Pull the backend directory out of the configuration.
+        //
+        // TODO: Does this really belong in the config? Or should it be part of the docker
+        // setup?
+        auto backend_directory = attributes->find("backend_directory");
+        if (backend_directory == attributes->end()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required parameter `backend_directory` not found in configuration";
+            throw std::invalid_argument(buffer.str());
+        }
+
+        auto* const backend_directory_string = backend_directory->second->get<std::string>();
+        if (!backend_directory_string || backend_directory_string->empty()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required non-empty string parameter `backend_directory` is either not a "
+                      "string "
+                      "or is an empty string";
+            throw std::invalid_argument(buffer.str());
+        }
+        // TODO(acm): Maybe validate path is a readable directory, if triton doesn't do so.
+        state->backend_directory = std::move(*backend_directory_string);
+
+        // Pull the model name out of the configuration.
+        auto model_name = attributes->find("model_name");
+        if (model_name == attributes->end()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required parameter `model_name` not found in configuration";
+            throw std::invalid_argument(buffer.str());
+        }
+
+        auto* const model_name_string = model_name->second->get<std::string>();
+        if (!model_name_string || model_name_string->empty()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Required non-empty string parameter `model_name` is either not a "
+                      "string "
+                      "or is an empty string";
+            throw std::invalid_argument(buffer.str());
+        }
+        state->model_name = std::move(*model_name_string);
+
+        // Process any tensor name remappings provided in the config.
+        auto remappings = attributes->find("tensor_name_remappings");
+        if (remappings != attributes->end()) {
+            const auto remappings_attributes = remappings->second->get<vsdk::AttributeMap>();
+            if (!remappings_attributes) {
+                std::ostringstream buffer;
+                buffer << service_name
+                       << ": Optional parameter `tensor_name_remappings` must be a dictionary";
+                throw std::invalid_argument(buffer.str());
+            }
+
+            const auto populate_remappings = [](const vsdk::ProtoType& source, auto& target) {
+                const auto source_attributes = source.get<vsdk::AttributeMap>();
+                if (!source_attributes) {
+                    std::ostringstream buffer;
+                    buffer << service_name
+                           << ": Fields `inputs` and `outputs` of `tensor_name_remappings` must be "
+                              "dictionaries";
+                    throw std::invalid_argument(buffer.str());
+                }
+                for (const auto& kv : *source_attributes) {
+                    const auto& k = kv.first;
+                    const auto* const kv_string = kv.second->get<std::string>();
+                    if (!kv_string) {
+                        std::ostringstream buffer;
+                        buffer
+                            << service_name
+                            << ": Fields `inputs` and `outputs` of `tensor_name_remappings` must "
+                               "be dictionaries with string values";
+                        throw std::invalid_argument(buffer.str());
+                    }
+                    target[kv.first] = *kv_string;
+                }
+            };
+
+            const auto inputs_where = remappings_attributes->find("inputs");
+            if (inputs_where != remappings_attributes->end()) {
+                populate_remappings(*inputs_where->second, state->input_name_remappings);
+            }
+            const auto outputs_where = remappings_attributes->find("outputs");
+            if (outputs_where != remappings_attributes->end()) {
+                populate_remappings(*outputs_where->second, state->output_name_remappings);
+            }
+        }
+
+        auto server_options = vtriton::make_unique<TRITONSERVER_ServerOptions>();
+
+        vtriton::call(TRITONSERVER_ServerOptionsSetModelRepositoryPath)(
+            server_options.get(), state->model_repo_path.c_str());
+
+        vtriton::call(TRITONSERVER_ServerOptionsSetBackendDirectory)(
+            server_options.get(), state->backend_directory.c_str());
+
+        // TODO: Parameterize?
+        vtriton::call(TRITONSERVER_ServerOptionsSetLogVerbose)(server_options.get(), 1);
+
+        // Needed so we can load a tensorflow model without a config file
+        // TODO: Maybe?
+        vtriton::call(TRITONSERVER_ServerOptionsSetStrictModelConfig)(server_options.get(), false);
+
+        // Per https://developer.nvidia.com/cuda-gpus, 5.3 is the lowest
+        // value for all of the Jetson Line.
+        //
+        // TODO: Does setting this low constrain our GPU utilization in ways
+        // that we don't like?
+        vtriton::call(TRITONSERVER_ServerOptionsSetMinSupportedComputeCapability)(
+            server_options.get(), 8.7);
+
+        std::cout << "XXX ACM constructing server" << std::endl;
+        state->server = vtriton::make_unique<TRITONSERVER_Server>(server_options.get());
+        std::cout << "XXX ACM constructed server" << std::endl;
+
+        return state;
     }
 
     // All of the meaningful internal state of the service is held in
@@ -320,10 +591,38 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         explicit state(vsdk::Dependencies dependencies, vsdk::ResourceConfig configuration)
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
 
+
+        ~state() {
+            std::cout << "XXX ACM Destroying State" << std::endl;
+        }
+
         // The dependencies and configuration we were given at
         // construction / reconfiguration.
         vsdk::Dependencies dependencies;
         vsdk::ResourceConfig configuration;
+
+        // The path to the model repository. The provided directory must
+        // meet the layout requirements for a triton model repository. See
+        //
+        // https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_repository.md
+        std::string model_repo_path;
+
+        // The path to the backend directory containing execution backends.
+        std::string backend_directory;
+
+        // The name of the specific model that this instance of the
+        // triton service will bind to.
+        std::string model_name;
+
+        // Tensor renamings as extracted from our configuration. The
+        // keys are the names of the tensors per the model, the values
+        // are the names of the tensors clients expect to see / use
+        // (e.g. a vision service component expecting a tensor named
+        // `image`).
+        std::unordered_map<std::string, std::string> input_name_remappings;
+        std::unordered_map<std::string, std::string> output_name_remappings;
+
+        vtriton::unique_ptr<TRITONSERVER_Server> server;
     };
 
     // The mutex and condition variable needed to track our state
@@ -334,13 +633,31 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     bool stopped_ = false;
 };
 
-int serve(const std::string& socket_path) try {
+int serve(const std::string& socket_path) noexcept try {
     // Block the signals we intend to wait for synchronously.
     sigset_t sigset;
     sigemptyset(&sigset);
     sigaddset(&sigset, SIGINT);
     sigaddset(&sigset, SIGTERM);
     pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+
+    // Validate that the version of the triton server that we are
+    // running against is sufficient w.r..t the version we were built
+    // against.
+    std::uint32_t triton_version_major;
+    std::uint32_t triton_version_minor;
+    vtriton::call(TRITONSERVER_ApiVersion)(&triton_version_major, &triton_version_minor);
+
+    if ((TRITONSERVER_API_VERSION_MAJOR != triton_version_major) ||
+        (TRITONSERVER_API_VERSION_MINOR > triton_version_minor)) {
+        std::ostringstream buffer;
+        buffer << service_name << ": Triton server API version mismatch: need "
+               << TRITONSERVER_API_VERSION_MAJOR << "." << TRITONSERVER_API_VERSION_MINOR
+               << " but have " << triton_version_major << "." << triton_version_minor << ".";
+        throw std::domain_error(buffer.str());
+    }
+    std::cout << service_name << ": Running Triton API " << triton_version_major << "."
+              << triton_version_minor << std::endl;
 
     // Create a new model registration for the service.
     auto module_registration = std::make_shared<vsdk::ModelRegistration>(
@@ -405,13 +722,6 @@ int serve(const std::string& socket_path) try {
 
 int main(int argc, char* argv[]) {
     const std::string usage = "usage: example_mlmodelservice_triton /path/to/unix/socket";
-
-    std::uint32_t api_version_major, api_version_minor;
-    TRITONSERVER_ApiVersion(&api_version_major, &api_version_minor);
-    std::cout << "TRITONSERVER_API_VERSION_MAJOR: " << TRITONSERVER_API_VERSION_MAJOR << std::endl;
-    std::cout << "TRITONSERVER_API_VERSION_MINOR: " << TRITONSERVER_API_VERSION_MINOR << std::endl;
-    std::cout << "api_version_major:              " << api_version_major << std::endl;
-    std::cout << "api_version_minor:              " << api_version_minor << std::endl;
 
     if (argc < 2) {
         std::cout << "ERROR: insufficient arguments\n";
