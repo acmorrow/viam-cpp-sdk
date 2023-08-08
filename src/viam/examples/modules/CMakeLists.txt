@@ -77,14 +77,15 @@ target_include_directories(example_mlmodelservice_triton
   PRIVATE /opt/tritonserver/include/tritonserver
 )
 
-target_link_directories(example_mlmodelservice_triton
-  PRIVATE /opt/tritonserver/lib
-)
+#target_link_directories(example_mlmodelservice_triton
+#  PRIVATE /opt/tritonserver/lib
+#)
 
 target_link_libraries(example_mlmodelservice_triton
   PRIVATE Threads::Threads
+  #PRIVATE tritonserver
   PRIVATE viam-cpp-sdk::viamsdk
-  PRIVATE tritonserver
+  PRIVATE ${CMAKE_DL_LIBS}
 )
 
 install(
@@ -107,6 +108,7 @@ target_link_directories(fake_mlmodelservice_triton
 target_link_libraries(fake_mlmodelservice_triton
   PRIVATE Threads::Threads
   PRIVATE tritonserver
+  PRIVATE ${CMAKE_DL_LIBS}
   # PRIVATE viam-cpp-sdk::viamsdk
 )
 
