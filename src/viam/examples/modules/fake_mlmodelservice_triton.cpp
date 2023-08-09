@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "dlfcn.h"
+
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -31,17 +33,47 @@ constexpr char service_name[] = "fake_mlmodelservice_triton";
 }  // namespace
 int main() {
 
+    auto vsdk = dlopen(// LM_ID_NEWLM,
+                       "/opt/viam/lib/libviamsdk.so.noabi", RTLD_GLOBAL | RTLD_NOW);
+    if (!vsdk) {
+        const auto err = dlerror();
+        std::ostringstream buffer;
+        buffer << service_name << ": Failed to open Viam SDK Library: " << err;
+        throw std::runtime_error(buffer.str());
+    }
+
     //std::uint32_t a, b;
     //TRITONSERVER_ApiVersion(&a, &b);
 
-    vtriton::shim::setup("/opt/tritonserver/lib/libtritonserver.so");
+    //auto handle = dlmopen(LM_ID_NEWLM, "libexample_mlmodelservice_triton_shim.so", RTLD_LAZY);
+    auto handle = dlopen("libexample_mlmodelservice_triton_shim.so", RTLD_NOW);
+    if (!handle) {
+        const auto err = dlerror();
+        std::ostringstream buffer;
+        buffer << service_name << ": Failed to open triton shim library: " << err;
+        throw std::runtime_error(buffer.str());
+    }
+
+    void* shim_init = dlsym(handle, "example_mlmodelservice_triton_shim_init");
+    if (!shim_init) {
+        const auto err = dlerror();
+        std::ostringstream buffer;
+        buffer << service_name << ": Failed to find shim_init entry point in shim librray: " << err;
+        throw std::runtime_error(buffer.str());
+    }
+
+    std::cout << "XXX ACM OUTSIDE BEFORE: " << ((void*)vtriton::the_shim.ApiVersion) << std::endl;
+    std::cout << "XXX ACM OUTSIDE pBEFORE: " << ((void*)&vtriton::the_shim.ApiVersion) << std::endl;
+    reinterpret_cast<decltype(&example_mlmodelservice_triton_shim_init)>(shim_init)(&vtriton::the_shim);
+    std::cout << "XXX ACM OUTSIDE AFTER: " << ((void*)vtriton::the_shim.ApiVersion) << std::endl;
+    std::cout << "XXX ACM OUTSIDE pAFTER: " << ((void*)&vtriton::the_shim.ApiVersion) << std::endl;
 
     // Validate that the version of the triton server that we are
     // running against is sufficient w.r..t the version we were built
     // against.
     std::uint32_t triton_version_major;
     std::uint32_t triton_version_minor;
-    vtriton::call(vtriton::shim::ApiVersion)(&triton_version_major, &triton_version_minor);
+    vtriton::call(vtriton::the_shim.ApiVersion)(&triton_version_major, &triton_version_minor);
 
     if ((TRITONSERVER_API_VERSION_MAJOR != triton_version_major) ||
         (TRITONSERVER_API_VERSION_MINOR > triton_version_minor)) {
@@ -68,25 +100,25 @@ int main() {
 
     auto server_options = vtriton::make_unique<TRITONSERVER_ServerOptions>();
 
-    vtriton::call(vtriton::shim::ServerOptionsSetModelRepositoryPath)(server_options.get(),
+    vtriton::call(vtriton::the_shim.ServerOptionsSetModelRepositoryPath)(server_options.get(),
                                                                     model_repo_path.c_str());
 
-    vtriton::call(vtriton::shim::ServerOptionsSetBackendDirectory)(server_options.get(),
+    vtriton::call(vtriton::the_shim.ServerOptionsSetBackendDirectory)(server_options.get(),
                                                                  backend_directory.c_str());
 
     // TODO: Parameterize?
-    vtriton::call(vtriton::shim::ServerOptionsSetLogVerbose)(server_options.get(), 1);
+    vtriton::call(vtriton::the_shim.ServerOptionsSetLogVerbose)(server_options.get(), 1);
 
     // Needed so we can load a tensorflow model without a config file
     // TODO: Maybe?
-    vtriton::call(vtriton::shim::ServerOptionsSetStrictModelConfig)(server_options.get(), false);
+    vtriton::call(vtriton::the_shim.ServerOptionsSetStrictModelConfig)(server_options.get(), false);
 
     // Per https://developer.nvidia.com/cuda-gpus, 5.3 is the lowest
     // value for all of the Jetson Line.
     //
     // TODO: Does setting this low constrain our GPU utilization in ways
     // that we don't like?
-    vtriton::call(vtriton::shim::ServerOptionsSetMinSupportedComputeCapability)(server_options.get(),
+    vtriton::call(vtriton::the_shim.ServerOptionsSetMinSupportedComputeCapability)(server_options.get(),
                                                                               8.7);
 
     std::cout << "XXX ACM constructing server" << std::endl;
@@ -97,6 +129,6 @@ int main() {
     std::this_thread::sleep_for(2000s);
 
     //viam::sdk::GeometryConfig config;
-    
+
     return 0;
 }

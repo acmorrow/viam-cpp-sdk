@@ -69,6 +69,27 @@ if (VIAMCPPSDK_BUILD_TFLITE_EXAMPLE_MODULE)
 endif()
 
 
+add_library(example_mlmodelservice_triton_shim
+  example_mlmodelservice_triton_shim.cpp
+)
+
+target_include_directories(example_mlmodelservice_triton_shim
+  PRIVATE /opt/tritonserver/include/tritonserver
+)
+
+target_link_directories(example_mlmodelservice_triton_shim
+  PRIVATE /opt/tritonserver/lib
+)
+
+target_link_libraries(example_mlmodelservice_triton_shim
+  PRIVATE tritonserver
+)
+
+install(
+  TARGETS example_mlmodelservice_triton_shim
+  COMPONENT examples
+)
+
 add_executable(example_mlmodelservice_triton
   example_mlmodelservice_triton.cpp
 )
@@ -77,13 +98,8 @@ target_include_directories(example_mlmodelservice_triton
   PRIVATE /opt/tritonserver/include/tritonserver
 )
 
-#target_link_directories(example_mlmodelservice_triton
-#  PRIVATE /opt/tritonserver/lib
-#)
-
 target_link_libraries(example_mlmodelservice_triton
   PRIVATE Threads::Threads
-  #PRIVATE tritonserver
   PRIVATE viam-cpp-sdk::viamsdk
   PRIVATE ${CMAKE_DL_LIBS}
 )
@@ -107,9 +123,8 @@ target_link_directories(fake_mlmodelservice_triton
 
 target_link_libraries(fake_mlmodelservice_triton
   PRIVATE Threads::Threads
-  # PRIVATE tritonserver
   PRIVATE ${CMAKE_DL_LIBS}
-  # PRIVATE viam-cpp-sdk::viamsdk
+  #PRIVATE viam-cpp-sdk::viamsdk
 )
 
 install(
