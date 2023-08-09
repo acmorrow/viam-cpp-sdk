@@ -26,8 +26,8 @@ decltype(TRITONSERVER_ServerOptionsSetStrictModelConfig)* ServerOptionsSetStrict
     nullptr;
 
 inline bool setup(const char* library) {
-    // auto handle = dlmopen(LM_ID_NEWLM, library, RTLD_NOW | RTLD_LOCAL);
-    auto handle = dlopen(library, RTLD_NOW | RTLD_GLOBAL);
+    auto handle = dlmopen(LM_ID_NEWLM, library, RTLD_NOW);
+    //auto handle = dlopen(library, RTLD_NOW | RTLD_GLOBAL);
     if (!handle) {
         std::cout << "XXXXXXXXXXX ACM OOPS dlmopen: " << dlerror() << std::endl;
         return false;

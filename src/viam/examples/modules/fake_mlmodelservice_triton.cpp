@@ -31,8 +31,8 @@ constexpr char service_name[] = "fake_mlmodelservice_triton";
 }  // namespace
 int main() {
 
-    std::uint32_t a, b;
-    TRITONSERVER_ApiVersion(&a, &b);
+    //std::uint32_t a, b;
+    //TRITONSERVER_ApiVersion(&a, &b);
 
     vtriton::shim::setup("/opt/tritonserver/lib/libtritonserver.so");
 

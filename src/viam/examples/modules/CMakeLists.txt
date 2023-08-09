@@ -107,7 +107,7 @@ target_link_directories(fake_mlmodelservice_triton
 
 target_link_libraries(fake_mlmodelservice_triton
   PRIVATE Threads::Threads
-  PRIVATE tritonserver
+  # PRIVATE tritonserver
   PRIVATE ${CMAKE_DL_LIBS}
   # PRIVATE viam-cpp-sdk::viamsdk
 )
