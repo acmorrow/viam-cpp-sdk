@@ -90,6 +90,24 @@ endif()
 #   COMPONENT examples
 # )
 
+add_library(example_mlmodelservice_triton_server
+  example_mlmodelservice_triton_server.cpp
+)
+
+target_include_directories(example_mlmodelservice_triton_server
+  PRIVATE /opt/tritonserver/include/tritonserver
+)
+
+target_link_libraries(example_mlmodelservice_triton_server
+  PRIVATE Threads::Threads
+  PRIVATE viam-cpp-sdk::viamsdk
+)
+
+install(
+  TARGETS example_mlmodelservice_triton_server
+  COMPONENT examples
+)
+
 add_executable(example_mlmodelservice_triton
   example_mlmodelservice_triton.cpp
 )
@@ -98,10 +116,14 @@ target_include_directories(example_mlmodelservice_triton
   PRIVATE /opt/tritonserver/include/tritonserver
 )
 
+target_link_directories(example_mlmodelservice_triton
+  PRIVATE /opt/tritonserver/lib
+)
+
 target_link_libraries(example_mlmodelservice_triton
   PRIVATE Threads::Threads
-  PRIVATE viam-cpp-sdk::viamsdk
   PRIVATE ${CMAKE_DL_LIBS}
+  PRIVATE tritonserver
 )
 
 install(
