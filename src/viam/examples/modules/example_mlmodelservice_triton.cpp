@@ -33,20 +33,51 @@ int main(int argc, char* argv[]) {
     }
 
     vtriton::the_shim.ApiVersion = &TRITONSERVER_ApiVersion;
-    vtriton::the_shim.ErrorCodeString = &TRITONSERVER_ErrorCodeString;
-    vtriton::the_shim.ErrorDelete = &TRITONSERVER_ErrorDelete;
-    vtriton::the_shim.ErrorMessage = &TRITONSERVER_ErrorMessage;
+
     vtriton::the_shim.ErrorNew = &TRITONSERVER_ErrorNew;
-    vtriton::the_shim.ServerOptionsDelete = &TRITONSERVER_ServerOptionsDelete;
+    vtriton::the_shim.ErrorCodeString = &TRITONSERVER_ErrorCodeString;
+    vtriton::the_shim.ErrorMessage = &TRITONSERVER_ErrorMessage;
+    vtriton::the_shim.ErrorDelete = &TRITONSERVER_ErrorDelete;
+
     vtriton::the_shim.ServerOptionsNew = &TRITONSERVER_ServerOptionsNew;
-    vtriton::the_shim.ServerDelete = &TRITONSERVER_ServerDelete;
-    vtriton::the_shim.ServerNew = &TRITONSERVER_ServerNew;
-    vtriton::the_shim.ServerOptionsSetBackendDirectory = &TRITONSERVER_ServerOptionsSetBackendDirectory;
+    vtriton::the_shim.ServerOptionsSetBackendDirectory =
+        &TRITONSERVER_ServerOptionsSetBackendDirectory;
     vtriton::the_shim.ServerOptionsSetLogVerbose = &TRITONSERVER_ServerOptionsSetLogVerbose;
     vtriton::the_shim.ServerOptionsSetMinSupportedComputeCapability =
         &TRITONSERVER_ServerOptionsSetMinSupportedComputeCapability;
-    vtriton::the_shim.ServerOptionsSetModelRepositoryPath = &TRITONSERVER_ServerOptionsSetModelRepositoryPath;
-    vtriton::the_shim.ServerOptionsSetStrictModelConfig = &TRITONSERVER_ServerOptionsSetStrictModelConfig;
+    vtriton::the_shim.ServerOptionsSetModelRepositoryPath =
+        &TRITONSERVER_ServerOptionsSetModelRepositoryPath;
+    vtriton::the_shim.ServerOptionsSetStrictModelConfig =
+        &TRITONSERVER_ServerOptionsSetStrictModelConfig;
+    vtriton::the_shim.ServerOptionsDelete = &TRITONSERVER_ServerOptionsDelete;
+
+    vtriton::the_shim.ServerNew = &TRITONSERVER_ServerNew;
+    vtriton::the_shim.ServerIsLive = &TRITONSERVER_ServerIsLive;
+    vtriton::the_shim.ServerIsReady = &TRITONSERVER_ServerIsReady;
+    vtriton::the_shim.ServerInferAsync = &TRITONSERVER_ServerInferAsync;
+    vtriton::the_shim.ServerDelete = &TRITONSERVER_ServerDelete;
+
+    vtriton::the_shim.ServerModelMetadata =
+        &TRITONSERVER_ServerModelMetadata;
+    vtriton::the_shim.MessageSerializeToJson = &TRITONSERVER_MessageSerializeToJson;
+
+    vtriton::the_shim.ResponseAllocatorNew = &TRITONSERVER_ResponseAllocatorNew;
+    vtriton::the_shim.ResponseAllocatorDelete = &TRITONSERVER_ResponseAllocatorDelete;
+
+    vtriton::the_shim.InferenceRequestNew = &TRITONSERVER_InferenceRequestNew;
+    vtriton::the_shim.InferenceRequestSetReleaseCallback =
+        &TRITONSERVER_InferenceRequestSetReleaseCallback;
+    vtriton::the_shim.InferenceRequestRemoveAllInputs =
+        &TRITONSERVER_InferenceRequestRemoveAllInputs;
+    vtriton::the_shim.InferenceRequestRemoveAllRequestedOutputs =
+        &TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs;
+    vtriton::the_shim.InferenceRequestAddInput =
+        &TRITONSERVER_InferenceRequestAddInput;
+    vtriton::the_shim.InferenceRequestAppendInputData = &TRITONSERVER_InferenceRequestAppendInputData;
+    vtriton::the_shim.InferenceRequestSetResponseCallback = &TRITONSERVER_InferenceRequestSetResponseCallback;
+    vtriton::the_shim.InferenceRequestDelete = &TRITONSERVER_InferenceRequestDelete;
+
+    vtriton::the_shim.InferenceResponseDelete = &TRITONSERVER_InferenceResponseDelete;
 
     auto lemtl = dlopen("libexample_mlmodelservice_triton_server.so", RTLD_NOW);
     if (!lemtl) {
@@ -62,6 +93,5 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    std::cout << "XXX ACM OUTSIDE " << ((void *)(&vtriton::the_shim)) << " " << ((void *)(&vtriton::the_shim.ApiVersion));
     return reinterpret_cast<int(*)(vtriton::shim*, const char*)>(lemtl_serve)(&vtriton::the_shim, argv[1]);
 }

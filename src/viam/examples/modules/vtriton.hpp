@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdexcept>
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
 #include <triton/core/tritonserver.h>
 
@@ -10,22 +10,52 @@ namespace vtriton {
 
 struct shim {
     decltype(TRITONSERVER_ApiVersion)* ApiVersion = nullptr;
-    decltype(TRITONSERVER_ErrorCodeString)* ErrorCodeString = nullptr;
-    decltype(TRITONSERVER_ErrorDelete)* ErrorDelete = nullptr;
-    decltype(TRITONSERVER_ErrorMessage)* ErrorMessage = nullptr;
+
     decltype(TRITONSERVER_ErrorNew)* ErrorNew = nullptr;
-    decltype(TRITONSERVER_ServerOptionsDelete)* ServerOptionsDelete = nullptr;
+    decltype(TRITONSERVER_ErrorCodeString)* ErrorCodeString = nullptr;
+    decltype(TRITONSERVER_ErrorMessage)* ErrorMessage = nullptr;
+    decltype(TRITONSERVER_ErrorDelete)* ErrorDelete = nullptr;
+
     decltype(TRITONSERVER_ServerOptionsNew)* ServerOptionsNew = nullptr;
-    decltype(TRITONSERVER_ServerDelete)* ServerDelete = nullptr;
-    decltype(TRITONSERVER_ServerNew)* ServerNew = nullptr;
-    decltype(TRITONSERVER_ServerOptionsSetBackendDirectory)* ServerOptionsSetBackendDirectory = nullptr;
+    decltype(TRITONSERVER_ServerOptionsSetBackendDirectory)* ServerOptionsSetBackendDirectory =
+        nullptr;
     decltype(TRITONSERVER_ServerOptionsSetLogVerbose)* ServerOptionsSetLogVerbose = nullptr;
     decltype(TRITONSERVER_ServerOptionsSetMinSupportedComputeCapability)*
-    ServerOptionsSetMinSupportedComputeCapability = nullptr;
-    decltype(TRITONSERVER_ServerOptionsSetModelRepositoryPath)* ServerOptionsSetModelRepositoryPath =
-        nullptr;
+        ServerOptionsSetMinSupportedComputeCapability = nullptr;
+    decltype(TRITONSERVER_ServerOptionsSetModelRepositoryPath)*
+        ServerOptionsSetModelRepositoryPath = nullptr;
     decltype(TRITONSERVER_ServerOptionsSetStrictModelConfig)* ServerOptionsSetStrictModelConfig =
         nullptr;
+    decltype(TRITONSERVER_ServerOptionsDelete)* ServerOptionsDelete = nullptr;
+
+    decltype(TRITONSERVER_ServerNew)* ServerNew = nullptr;
+    decltype(TRITONSERVER_ServerIsLive)* ServerIsLive = nullptr;
+    decltype(TRITONSERVER_ServerIsReady)* ServerIsReady = nullptr;
+    decltype(TRITONSERVER_ServerInferAsync)* ServerInferAsync = nullptr;
+    decltype(TRITONSERVER_ServerDelete)* ServerDelete = nullptr;
+
+    decltype(TRITONSERVER_ServerModelMetadata)* ServerModelMetadata = nullptr;
+    decltype(TRITONSERVER_MessageSerializeToJson)* MessageSerializeToJson = nullptr;
+
+    decltype(TRITONSERVER_ResponseAllocatorNew)* ResponseAllocatorNew = nullptr;
+    decltype(TRITONSERVER_ResponseAllocatorDelete)* ResponseAllocatorDelete = nullptr;
+
+    decltype(TRITONSERVER_InferenceRequestNew)* InferenceRequestNew = nullptr;
+    decltype(TRITONSERVER_InferenceRequestSetReleaseCallback)* InferenceRequestSetReleaseCallback =
+        nullptr;
+    decltype(TRITONSERVER_InferenceRequestRemoveAllInputs)* InferenceRequestRemoveAllInputs =
+        nullptr;
+    decltype(TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs)* InferenceRequestRemoveAllRequestedOutputs =
+        nullptr;
+    decltype(TRITONSERVER_InferenceRequestAddInput)* InferenceRequestAddInput =
+        nullptr;
+    decltype(TRITONSERVER_InferenceRequestAppendInputData)* InferenceRequestAppendInputData =
+        nullptr;
+    decltype(TRITONSERVER_InferenceRequestSetResponseCallback)* InferenceRequestSetResponseCallback =
+        nullptr;
+
+    decltype(TRITONSERVER_InferenceRequestDelete)* InferenceRequestDelete = nullptr;
+    decltype(TRITONSERVER_InferenceResponseDelete)* InferenceResponseDelete = nullptr;
 };
 
 shim the_shim;
@@ -94,11 +124,11 @@ struct lifecycle_traits<TRITONSERVER_ServerOptions> {
         TRITONSERVER_ServerOptions* opts = nullptr;
         call(the_shim.ServerOptionsNew)(&opts, std::forward<Args>(args)...);
         return opts;
-    };
+    }
     template <class... Args>
     static auto dtor(Args&&... args) {
         call(the_shim.ServerOptionsDelete)(std::forward<Args>(args)...);
-    };
+    }
 };
 
 template <>
@@ -109,10 +139,49 @@ struct lifecycle_traits<TRITONSERVER_Server> {
         TRITONSERVER_Server* server = nullptr;
         call(the_shim.ServerNew)(&server, std::forward<Args>(args)...);
         return server;
-    };
+    }
     template <class... Args>
     static auto dtor(Args&&... args) {
         call(the_shim.ServerDelete)(std::forward<Args>(args)...);
+    }
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_ResponseAllocator> {
+    using value_type = TRITONSERVER_ResponseAllocator;
+    template <class... Args>
+    static auto ctor(Args&&... args) {
+        value_type* pself;
+        call(the_shim.ResponseAllocatorNew)(&pself, std::forward<Args>(args)...);
+        return pself;
+    }
+    template <class... Args>
+    static auto dtor(Args&&... args) {
+        call(the_shim.ResponseAllocatorDelete)(std::forward<Args>(args)...);
+    }
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_InferenceRequest> {
+    using value_type = TRITONSERVER_InferenceRequest;
+    template <class... Args>
+    static auto ctor(Args&&... args) {
+        value_type* pself;
+        call(the_shim.InferenceRequestNew)(&pself, std::forward<Args>(args)...);
+        return pself;
+    };
+    template <class... Args>
+    static auto dtor(Args&&... args) {
+        call(the_shim.InferenceRequestDelete)(std::forward<Args>(args)...);
+    };
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_InferenceResponse> {
+    using value_type = TRITONSERVER_InferenceResponse;
+    template <class... Args>
+    static auto dtor(Args&&... args) {
+        call(the_shim.InferenceResponseDelete)(std::forward<Args>(args)...);
     };
 };
 

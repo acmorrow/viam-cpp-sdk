@@ -69,106 +69,113 @@ if (VIAMCPPSDK_BUILD_TFLITE_EXAMPLE_MODULE)
 endif()
 
 
-# add_library(example_mlmodelservice_triton_shim
-#   example_mlmodelservice_triton_shim.cpp
-# )
+option(VIAMCPPSDK_BUILD_TRITON_EXAMPLE_MODULE "Select whether to build the triton example module" OFF)
 
-# target_include_directories(example_mlmodelservice_triton_shim
-#   PRIVATE /opt/tritonserver/include/tritonserver
-# )
+if (VIAMCPPSDK_BUILD_TRITON_EXAMPLE_MODULE)
+  find_package(CUDAToolkit REQUIRED)
 
-# target_link_directories(example_mlmodelservice_triton_shim
-#   PRIVATE /opt/tritonserver/lib
-# )
+  # add_library(example_mlmodelservice_triton_shim
+  #   example_mlmodelservice_triton_shim.cpp
+  # )
 
-# target_link_libraries(example_mlmodelservice_triton_shim
-#   PRIVATE tritonserver
-# )
+  # target_include_directories(example_mlmodelservice_triton_shim
+  #   PRIVATE /opt/tritonserver/include/tritonserver
+  # )
 
-# install(
-#   TARGETS example_mlmodelservice_triton_shim
-#   COMPONENT examples
-# )
+  # target_link_directories(example_mlmodelservice_triton_shim
+  #   PRIVATE /opt/tritonserver/lib
+  # )
 
-add_library(example_mlmodelservice_triton_server
-  example_mlmodelservice_triton_server.cpp
-)
+  # target_link_libraries(example_mlmodelservice_triton_shim
+  #   PRIVATE tritonserver
+  # )
 
-target_include_directories(example_mlmodelservice_triton_server
-  PRIVATE /opt/tritonserver/include/tritonserver
-)
+  # install(
+  #   TARGETS example_mlmodelservice_triton_shim
+  #   COMPONENT examples
+  # )
 
-target_link_libraries(example_mlmodelservice_triton_server
-  PRIVATE Threads::Threads
-  PRIVATE viam-cpp-sdk::viamsdk
-)
+  add_library(example_mlmodelservice_triton_server
+    example_mlmodelservice_triton_server.cpp
+  )
 
-install(
-  TARGETS example_mlmodelservice_triton_server
-  COMPONENT examples
-)
+  target_include_directories(example_mlmodelservice_triton_server
+    PRIVATE /opt/tritonserver/include/tritonserver
+  )
 
-add_executable(example_mlmodelservice_triton
-  example_mlmodelservice_triton.cpp
-)
+  target_link_libraries(example_mlmodelservice_triton_server
+    PRIVATE Threads::Threads
+    PRIVATE viam-cpp-sdk::viamsdk
+    PRIVATE CUDA::toolkit
+  )
 
-target_include_directories(example_mlmodelservice_triton
-  PRIVATE /opt/tritonserver/include/tritonserver
-)
+  install(
+    TARGETS example_mlmodelservice_triton_server
+    COMPONENT examples
+  )
 
-target_link_directories(example_mlmodelservice_triton
-  PRIVATE /opt/tritonserver/lib
-)
+  add_executable(example_mlmodelservice_triton
+    example_mlmodelservice_triton.cpp
+  )
 
-target_link_libraries(example_mlmodelservice_triton
-  PRIVATE Threads::Threads
-  PRIVATE ${CMAKE_DL_LIBS}
-  PRIVATE tritonserver
-)
+  target_include_directories(example_mlmodelservice_triton
+    PRIVATE /opt/tritonserver/include/tritonserver
+  )
 
-install(
-  TARGETS example_mlmodelservice_triton
-  COMPONENT examples
-)
+  target_link_directories(example_mlmodelservice_triton
+    PRIVATE /opt/tritonserver/lib
+  )
 
-add_library(fake_mlmodelservice_triton_lib
-  fake_mlmodelservice_triton_lib.cpp
-)
+  target_link_libraries(example_mlmodelservice_triton
+    PRIVATE Threads::Threads
+    PRIVATE ${CMAKE_DL_LIBS}
+    PRIVATE tritonserver
+  )
 
-target_include_directories(fake_mlmodelservice_triton_lib
-  PRIVATE /opt/tritonserver/include/tritonserver
-)
+  install(
+    TARGETS example_mlmodelservice_triton
+    COMPONENT examples
+  )
 
-target_link_libraries(fake_mlmodelservice_triton_lib
-  PRIVATE Threads::Threads
-  PRIVATE ${CMAKE_DL_LIBS}
-  PRIVATE viam-cpp-sdk::viamsdk
-)
+  add_library(fake_mlmodelservice_triton_lib
+    fake_mlmodelservice_triton_lib.cpp
+  )
 
-install(
-  TARGETS fake_mlmodelservice_triton_lib
-  COMPONENT examples
-)
+  target_include_directories(fake_mlmodelservice_triton_lib
+    PRIVATE /opt/tritonserver/include/tritonserver
+  )
 
-add_executable(fake_mlmodelservice_triton
-  fake_mlmodelservice_triton.cpp
-)
+  target_link_libraries(fake_mlmodelservice_triton_lib
+    PRIVATE Threads::Threads
+    PRIVATE ${CMAKE_DL_LIBS}
+    PRIVATE viam-cpp-sdk::viamsdk
+  )
 
-target_include_directories(fake_mlmodelservice_triton
-  PRIVATE /opt/tritonserver/include/tritonserver
-)
+  install(
+    TARGETS fake_mlmodelservice_triton_lib
+    COMPONENT examples
+  )
 
-target_link_directories(fake_mlmodelservice_triton
-  PRIVATE /opt/tritonserver/lib
-)
+  add_executable(fake_mlmodelservice_triton
+    fake_mlmodelservice_triton.cpp
+  )
 
-target_link_libraries(fake_mlmodelservice_triton
-  PRIVATE Threads::Threads
-  PRIVATE ${CMAKE_DL_LIBS}
-  PRIVATE tritonserver
-)
+  target_include_directories(fake_mlmodelservice_triton
+    PRIVATE /opt/tritonserver/include/tritonserver
+  )
 
-install(
-  TARGETS fake_mlmodelservice_triton
-  COMPONENT examples
-)
+  target_link_directories(fake_mlmodelservice_triton
+    PRIVATE /opt/tritonserver/lib
+  )
+
+  target_link_libraries(fake_mlmodelservice_triton
+    PRIVATE Threads::Threads
+    PRIVATE ${CMAKE_DL_LIBS}
+    PRIVATE tritonserver
+  )
+
+  install(
+    TARGETS fake_mlmodelservice_triton
+    COMPONENT examples
+  )
+endif()

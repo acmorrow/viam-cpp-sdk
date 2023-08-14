@@ -17,9 +17,11 @@
 
 #include <condition_variable>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <stack>
 #include <stdexcept>
 
 #include <grpcpp/channel.h>
@@ -36,10 +38,36 @@
 
 #include "vtriton.hpp"
 
+#include <cuda_runtime_api.h>
+
 namespace {
 
 namespace vsdk = ::viam::sdk;
 constexpr char service_name[] = "example_mlmodelservice_triton";
+
+static const auto cuda_deleter = [](void* ptr) {
+    if (!ptr)
+        return;
+
+    cudaPointerAttributes cuda_attrs;
+    auto cuda_error = cudaPointerGetAttributes(&cuda_attrs, ptr);
+    // TODO: examine error and (throw?)
+    // TODO: set device?
+    switch (cuda_attrs.type) {
+        case cudaMemoryTypeDevice: {
+            cuda_error = cudaFree(ptr);
+            break;
+        }
+        case cudaMemoryTypeHost: {
+            cuda_error = cudaFreeHost(ptr);
+            break;
+        }
+        default: {
+            // TODO: abort?
+        }
+    }
+    // TODO: examine error
+};
 
 // A namespace to bind unique_ptr and shared_ptr to the triton types in handy ways. Also
 // provides other helpers specialized to interacting with the triton API, like vtriton::call.
@@ -55,10 +83,10 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                   vsdk::ResourceConfig configuration) try
         : MLModelService(configuration.name()),
           state_(reconfigure_(std::move(dependencies), std::move(configuration))) {
-        std::cout << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
+        std::cerr << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
                   << std::endl;
     } catch (...) {
-        std::cout << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP" << std::endl;
+        std::cerr << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP" << std::endl;
         try {
             throw;
 
@@ -142,24 +170,77 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         throw;
     }
 
-    std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final {
-        std::cout << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
+    std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final try {
+        std::cerr << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
         const auto state = lease_state_();
 
-        static constexpr std::array<float, 100> location_data = {0.1, 0.1, 0.75, 0.75};
-        static constexpr std::array<float, 25> category_data = {0};
-        static constexpr std::array<float, 25> score_data = {.99};
-        static constexpr std::array<float, 1> num_dets_data = {25};
+        // TODO: Ensure that enough inputs were provided by comparing with metadata
+
+        auto inference_request = get_inference_request_(state);
+
+        // Attach inputs to the inference request
+        std::stack<cuda_unique_ptr> cuda_allocations;
+        for (const auto& kv : inputs) {
+            const std::string* input_name = &kv.first;
+            const auto where = state->input_name_remappings_reversed.find(*input_name);
+            if (where != state->input_name_remappings_reversed.end()) {
+                input_name = &where->second;
+            }
+            inference_request_input_visitor_ visitor(input_name,
+                                                     inference_request.get(),
+                                                     // TODO: config option?
+                                                     TRITONSERVER_MEMORY_GPU,
+                                                     // TODO: config option?
+                                                     0);
+            cuda_allocations.push(boost::apply_visitor(visitor, kv.second));
+        }
+
+        std::promise<TRITONSERVER_InferenceResponse*> inference_promise;
+        auto inference_future = inference_promise.get_future();
+
+        vtriton::call(vtriton::the_shim.InferenceRequestSetResponseCallback)(
+            inference_request.get(),
+            state->allocator.get(),
+            state.get(),
+            [](TRITONSERVER_InferenceResponse* response,
+               const uint32_t flags,
+               void* userp) noexcept {
+                auto* promise =
+                    reinterpret_cast<std::promise<TRITONSERVER_InferenceResponse*>*>(userp);
+                promise->set_value(response);
+            },
+            &inference_promise);
+
+        vtriton::call(vtriton::the_shim.ServerInferAsync)(
+            state->server.get(), inference_request.release(), nullptr);
+
+        auto result2 = inference_future.get();
+        auto inference_response = vtriton::take_unique(result2);
+
+        auto error = TRITONSERVER_InferenceResponseError(inference_response.get());
+        if (error) {
+            std::ostringstream buffer;
+            buffer << ": Triton Server Inference Error: " << vtriton::the_shim.ErrorCodeString(error) << " - "
+                   << vtriton::the_shim.ErrorMessage(error);
+            std::cerr << "XXX ACM Inference Failed!" << buffer.str() << std::endl;
+            throw std::runtime_error(buffer.str());
+        }
+
+        static constexpr std::array<float, 400>
+            location_data = {0.1, 0.1, 0.75, 0.75};
+        static constexpr std::array<float, 100> category_data = {0};
+        static constexpr std::array<float, 100> score_data = {.99};
+        static constexpr std::array<float, 1> num_dets_data = {100};
 
         auto location_tensor =
-            make_tensor_view(location_data.data(), location_data.size(), {1, 25, 4});
+            make_tensor_view(location_data.data(), location_data.size(), {1, 100, 4});
 
         auto category_tensor =
-            make_tensor_view(category_data.data(), category_data.size(), {1, 25});
+            make_tensor_view(category_data.data(), category_data.size(), {1, 100});
 
-        auto score_tensor = make_tensor_view(score_data.data(), score_data.size(), {1, 25});
+        auto score_tensor = make_tensor_view(score_data.data(), score_data.size(), {1, 100});
 
-        auto num_dets_tensor = make_tensor_view(num_dets_data.data(), num_dets_data.size(), {1});
+        auto num_dets_tensor = make_tensor_view(num_dets_data.data(), num_dets_data.size(), {1, 1});
 
         using namespace std::literals::string_literals;
         named_tensor_views tensors{{"location"s, std::move(location_tensor)},
@@ -167,12 +248,20 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                    {"score"s, std::move(score_tensor)},
                                    {"n_detections"s, std::move(num_dets_tensor)}};
 
-        return std::make_shared<named_tensor_views>(std::move(tensors));
-        return {};
+        auto result = std::make_shared<named_tensor_views>(std::move(tensors));
+        return result;
+    } catch(const std::exception& xcp) {
+        std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with exception: " << xcp.what()
+                  << std::endl;
+        throw;
+    } catch(...) {
+        std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with an unknown exception"
+                  << std::endl;
+        throw;
     }
 
     struct metadata metadata() final {
-        std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
+        std::cerr << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
         // Just return a copy of our metadata from leased state.
         const auto state = lease_state_();
         // This metadata is modelled on the results obtained from
@@ -203,7 +292,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                      tensor_info::data_types::k_uint8,
 
                      // `shape`
-                     {1, 320, 320, 3},
+                     {-1, 640, 480, 3},
 
                      // `associated_files`
                      {},
@@ -223,7 +312,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                   tensor_info::data_types::k_float32,
 
                   // `shape`
-                  {1, 25, 4},
+                  {-1, 100, 4},
 
                   // `associated_files`
                   {},
@@ -243,7 +332,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                   tensor_info::data_types::k_float32,
 
                   // `shape`
-                  {1, 25},
+                  {-1, 100},
 
                   // `associated files`
                   {{
@@ -269,7 +358,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                   tensor_info::data_types::k_float32,
 
                   // `shape`
-                  {1, 25},
+                  {-1, 100},
 
                   // `associated_files`
                   {},
@@ -287,7 +376,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                   tensor_info::data_types::k_float32,
 
                   // `shape`
-                  {1},
+                  {-1, 1},
 
                   // `associated_files`
                   {},
@@ -423,7 +512,9 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 throw std::invalid_argument(buffer.str());
             }
 
-            const auto populate_remappings = [](const vsdk::ProtoType& source, auto& target) {
+            const auto populate_remappings = [](const vsdk::ProtoType& source,
+                                                auto& target,
+                                                auto& inv_target) {
                 const auto source_attributes = source.get<vsdk::AttributeMap>();
                 if (!source_attributes) {
                     std::ostringstream buffer;
@@ -444,21 +535,31 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                         throw std::invalid_argument(buffer.str());
                     }
                     target[kv.first] = *kv_string;
+                    inv_target[*kv_string] = kv.first;
                 }
             };
 
             const auto inputs_where = remappings_attributes->find("inputs");
             if (inputs_where != remappings_attributes->end()) {
-                populate_remappings(*inputs_where->second, state->input_name_remappings);
+                populate_remappings(*inputs_where->second,
+                                    state->input_name_remappings,
+                                    state->input_name_remappings_reversed);
             }
             const auto outputs_where = remappings_attributes->find("outputs");
             if (outputs_where != remappings_attributes->end()) {
-                populate_remappings(*outputs_where->second, state->output_name_remappings);
+                populate_remappings(*outputs_where->second,
+                                    state->output_name_remappings,
+                                    state->output_name_remappings_reversed);
             }
         }
 
+        auto allocator = vtriton::make_unique<TRITONSERVER_ResponseAllocator>(
+            allocate_response_, deallocate_response_, nullptr);
+
         auto server_options = vtriton::make_unique<TRITONSERVER_ServerOptions>();
 
+        // TODO: We should probably pool servers based on repo path
+        // and backend directory.
         vtriton::call(vtriton::the_shim.ServerOptionsSetModelRepositoryPath)(
             server_options.get(), state->model_repo_path.c_str());
 
@@ -471,7 +572,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // Needed so we can load a tensorflow model without a config file
         // TODO: Maybe?
         vtriton::call(vtriton::the_shim.ServerOptionsSetStrictModelConfig)(server_options.get(),
-                                                                        false);
+                                                                           false);
 
         // Per https://developer.nvidia.com/cuda-gpus, 5.3 is the lowest
         // value for all of the Jetson Line.
@@ -481,12 +582,324 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         vtriton::call(vtriton::the_shim.ServerOptionsSetMinSupportedComputeCapability)(
             server_options.get(), 8.7);
 
-        std::cout << "XXX ACM constructing server" << std::endl;
-        state->server = vtriton::make_unique<TRITONSERVER_Server>(server_options.get());
-        std::cout << "XXX ACM constructed server" << std::endl;
+        auto server = vtriton::make_unique<TRITONSERVER_Server>(server_options.get());
+
+        // TODO: These limits / timeouts should probably be configurable.
+        bool result = false;
+        for (size_t tries = 0; tries != 30; ++tries) {
+            vtriton::call(vtriton::the_shim.ServerIsLive)(server.get(), &result);
+            if (result) {
+                vtriton::call(vtriton::the_shim.ServerIsReady)(server.get(), &result);
+                if (result) {
+                    std::cerr << "XXX ACM Triton Server is live and ready" << std::endl;
+                    break;
+                }
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        }
+        if (!result) {
+            std::cerr << "XXX ACM Triton Server did not become live and ready" << std::endl;
+            throw std::runtime_error("Triton Server did not become live and ready within 30s");
+        }
+
+        TRITONSERVER_Message* model_metadata = nullptr;
+        vtriton::call(vtriton::the_shim.ServerModelMetadata)(
+            server.get(), state->model_name.c_str(), -1, &model_metadata);
+
+        const char* json_base;
+        size_t json_size;
+        vtriton::call(vtriton::the_shim.MessageSerializeToJson)(
+            model_metadata, &json_base, &json_size);
+        std::string json_string(json_base, json_size);
+        std::cerr << "XXX ACM Model Metadata:" << json_string << std::endl;
+
+        // TODO: Parse model metadata
+        // TODO: Delete metadata Message
+
+        state->allocator = std::move(allocator);
+        state->server = std::move(server);
 
         return state;
     }
+
+    static TRITONSERVER_Error* allocate_response_(TRITONSERVER_ResponseAllocator* allocator,
+                                                  const char* tensor_name,
+                                                  std::size_t byte_size,
+                                                  TRITONSERVER_MemoryType memory_type,
+                                                  std::int64_t memory_type_id,
+                                                  void* userp,
+                                                  void** buffer,
+                                                  void** buffer_userp,
+                                                  TRITONSERVER_MemoryType* actual_memory_type,
+                                                  std::int64_t* actual_memory_type_id) noexcept {
+        auto* const state = reinterpret_cast<struct state*>(userp);
+        *buffer_userp = state;
+
+        if (!byte_size) {
+            *buffer = nullptr;
+            return nullptr;
+        }
+
+        switch (memory_type) {
+            case TRITONSERVER_MEMORY_CPU_PINNED:  // Fallthrough
+            case TRITONSERVER_MEMORY_GPU: {
+                auto cuda_error = cudaSetDevice(memory_type_id);
+                if (cuda_error != cudaSuccess) {
+                    std::ostringstream buffer;
+                    buffer << service_name
+                           << ": Failed in `cudaSetDevice`` while allocating for response: "
+                           << cudaGetErrorString(cuda_error);
+                    return vtriton::the_shim.ErrorNew(TRITONSERVER_ERROR_UNAVAILABLE,
+                                                      buffer.str().c_str());
+                }
+                cuda_error = (memory_type == TRITONSERVER_MEMORY_CPU_PINNED)
+                                 ? cudaHostAlloc(buffer, byte_size, cudaHostAllocPortable)
+                                 : cudaMalloc(buffer, byte_size);
+                if (cuda_error != cudaSuccess) {
+                    std::ostringstream buffer;
+                    buffer << service_name
+                           << ": Failed in `cuda[HostA|Ma]lloc` while allocating for response: "
+                           << cudaGetErrorString(cuda_error);
+                    return vtriton::the_shim.ErrorNew(TRITONSERVER_ERROR_UNAVAILABLE,
+                                                      buffer.str().c_str());
+                }
+                break;
+            }
+            case TRITONSERVER_MEMORY_CPU:  // Fallthrough
+            default: {
+                memory_type = TRITONSERVER_MEMORY_CPU;
+                *buffer = std::malloc(byte_size);
+                if (!*buffer) {
+                    std::ostringstream buffer;
+                    buffer << service_name
+                           << ": Failed in `std::malloc` while allocating for response";
+                    return vtriton::the_shim.ErrorNew(TRITONSERVER_ERROR_UNAVAILABLE,
+                                                      buffer.str().c_str());
+                }
+                break;
+            }
+        }
+
+        // We made it!
+        *buffer_userp = nullptr;  // userp?
+        *actual_memory_type = memory_type;
+        *actual_memory_type_id = memory_type_id;
+
+        return nullptr;
+    }
+
+    static TRITONSERVER_Error* deallocate_response_(TRITONSERVER_ResponseAllocator* allocator,
+                                                    void* buffer,
+                                                    void* buffer_userp,
+                                                    std::size_t byte_size,
+                                                    TRITONSERVER_MemoryType memory_type,
+                                                    std::int64_t memory_type_id) noexcept {
+        auto* const state = reinterpret_cast<struct state*>(buffer_userp);
+
+        switch (memory_type) {
+            case TRITONSERVER_MEMORY_CPU_PINNED:  // Fallthrough
+            case TRITONSERVER_MEMORY_GPU: {
+                auto cuda_error = cudaSetDevice(memory_type_id);
+                if (cuda_error != cudaSuccess) {
+                    std::cout << service_name
+                              << ": Failed to obtain cuda device when deallocating response data: `"
+                              << cudaGetErrorString(cuda_error) << "` - terminating";
+                    std::abort();
+                }
+                auto cudaFreeFn =
+                    (memory_type == TRITONSERVER_MEMORY_CPU_PINNED) ? cudaFreeHost : cudaFree;
+                cuda_error = cudaFreeFn(buffer);
+                if (cuda_error != cudaSuccess) {
+                    std::cout << service_name
+                              << ": Failed cudaFree[host] when deallocating response data: `"
+                              << cudaGetErrorString(cuda_error) << "` - terminating";
+                    std::abort();
+                }
+                break;
+            }
+            case TRITONSERVER_MEMORY_CPU: {
+                std::free(buffer);
+                break;
+            }
+            default: {
+                std::cout << service_name
+                          << ": Cannot honor request to deallocate unknown MemoryType "
+                          << memory_type << " - terminating" << std::endl;
+                std::abort();
+            }
+        }
+
+        return nullptr;
+    }
+
+    vtriton::unique_ptr<TRITONSERVER_InferenceRequest> get_inference_request_(
+        const std::shared_ptr<struct state>& state) {
+        vtriton::unique_ptr<TRITONSERVER_InferenceRequest> result;
+        {
+            std::unique_lock<std::mutex> lock(state->mutex);
+            if (!state->inference_requests.empty()) {
+                result = std::move(state->inference_requests.top());
+                state->inference_requests.pop();
+                return result;
+            }
+        }
+
+        // TODO: Should model version be a config parameter?
+        result = vtriton::make_unique<TRITONSERVER_InferenceRequest>(
+            state->server.get(), state->model_name.c_str(), -1);
+
+        vtriton::call(vtriton::the_shim.InferenceRequestSetReleaseCallback)(
+            result.get(), &release_inference_request_, state.get());
+
+        return result;
+    }
+
+    static void release_inference_request_(TRITONSERVER_InferenceRequest* request,
+                                           const uint32_t flags,
+                                           void* userp) noexcept {
+
+        if (flags != TRITONSERVER_REQUEST_RELEASE_ALL) {
+            // TODO: Log something
+            std::abort();
+        }
+
+        try {
+            auto taken = vtriton::take_unique(request);
+            vtriton::call(vtriton::the_shim.InferenceRequestRemoveAllInputs)(taken.get());
+            vtriton::call(vtriton::the_shim.InferenceRequestRemoveAllRequestedOutputs)(taken.get());
+            auto* const state = reinterpret_cast<struct state*>(userp);
+            std::unique_lock<std::mutex> lock(state->mutex);
+            state->inference_requests.push(std::move(taken));
+        } catch (...) {
+            // TODO: log?
+        }
+    }
+
+    using cuda_unique_ptr = std::unique_ptr<void, decltype(cuda_deleter)>;
+
+    class inference_request_input_visitor_ : public boost::static_visitor<cuda_unique_ptr> {
+       public:
+        inference_request_input_visitor_(const std::string* name,
+                                         TRITONSERVER_InferenceRequest* request,
+                                         TRITONSERVER_MemoryType memory_type,
+                                         std::int64_t memory_type_id)
+            : name_(name),
+              request_(request),
+              memory_type_(memory_type),
+              memory_type_id_(memory_type_id) {}
+
+        template <typename T>
+        cuda_unique_ptr operator()(const T& mlmodel_tensor) const {
+            std::cerr << "XXX ACM Attaching " << name_ << ": [";
+            for (size_t i = 0; i != mlmodel_tensor.shape().size(); ++i) {
+                std::cout << mlmodel_tensor.shape()[i] << ", ";
+            }
+            std::cout << "]" << std::endl;
+            std::vector<std::size_t> revised_shape(mlmodel_tensor.shape());
+            // TODO: We need real metadata!
+            if (mlmodel_tensor.shape().size() == 1) {
+                revised_shape.assign(4, 0UL);
+                revised_shape[0] = 1;
+                revised_shape[1] = 640;
+                revised_shape[2] = 480;
+                revised_shape[3] = 3;
+
+                std::cerr << "XXX ACM Revised shape for " << name_ << ": [";
+                for (size_t i = 0; i != revised_shape.size(); ++i) {
+                    std::cout << revised_shape[i] << ", ";
+                }
+                std::cout << "]" << std::endl;
+            }
+            vtriton::call(vtriton::the_shim.InferenceRequestAddInput)(
+                request_,
+                name_->c_str(),
+                triton_datatype_for_(mlmodel_tensor),
+                reinterpret_cast<const int64_t*>(&revised_shape[0]),
+                revised_shape.size());
+
+            const auto* const mlmodel_data_begin =
+                reinterpret_cast<const unsigned char*>(mlmodel_tensor.data());
+            const auto* const mlmodel_data_end = reinterpret_cast<const unsigned char*>(
+                mlmodel_tensor.data() + mlmodel_tensor.size());
+            const auto mlmodel_data_size =
+                static_cast<size_t>(mlmodel_data_end - mlmodel_data_begin);
+
+            void* alloc = nullptr;
+            const void* data = nullptr;
+            cuda_unique_ptr result(nullptr, cuda_deleter);
+            switch (memory_type_) {
+                case TRITONSERVER_MEMORY_GPU: {
+                    auto cuda_error = cudaMalloc(&alloc, mlmodel_data_size);
+                    cuda_error = cudaMemcpy(
+                        alloc, mlmodel_data_begin, mlmodel_data_size, cudaMemcpyHostToDevice);
+                    // TODO: check cuda errors
+                    result.reset(alloc);
+                    data = alloc;
+                    break;
+                }
+                case TRITONSERVER_MEMORY_CPU_PINNED: {
+                    auto cuda_error =
+                        cudaHostAlloc(&alloc, mlmodel_data_size, cudaHostAllocPortable);
+                    cuda_error = cudaMemcpy(
+                        alloc, mlmodel_data_begin, mlmodel_data_size, cudaMemcpyHostToHost);
+                    // TODO: check cuda_errors
+                    result.reset(alloc);
+                    data = alloc;
+                    break;
+                }
+                case TRITONSERVER_MEMORY_CPU:
+                default: {
+                    data = mlmodel_data_begin;
+                    break;
+                }
+            }
+
+            vtriton::call(vtriton::the_shim.InferenceRequestAppendInputData)(
+                request_, name_->c_str(), data, mlmodel_data_size, memory_type_, memory_type_id_);
+
+            return result;
+        }
+
+       private:
+        template <typename T>
+        using tv = vsdk::MLModelService::tensor_view<T>;
+
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::int8_t>& t) {
+            return TRITONSERVER_TYPE_INT8;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::uint8_t>& t) {
+            return TRITONSERVER_TYPE_UINT8;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::int16_t>& t) {
+            return TRITONSERVER_TYPE_INT16;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::uint16_t>& t) {
+            return TRITONSERVER_TYPE_UINT16;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::int32_t>& t) {
+            return TRITONSERVER_TYPE_INT32;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::uint32_t>& t) {
+            return TRITONSERVER_TYPE_UINT32;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::int64_t>& t) {
+            return TRITONSERVER_TYPE_INT64;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<std::uint64_t>& t) {
+            return TRITONSERVER_TYPE_UINT64;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<float>& t) {
+            return TRITONSERVER_TYPE_FP32;
+        }
+        static TRITONSERVER_DataType triton_datatype_for_(const tv<double>& t) {
+            return TRITONSERVER_TYPE_FP64;
+        }
+
+        const std::string* name_;
+        TRITONSERVER_InferenceRequest* request_;
+        TRITONSERVER_MemoryType memory_type_;
+        std::int64_t memory_type_id_;
+    };
 
     // All of the meaningful internal state of the service is held in
     // a separate state object so we can keep our current state alive
@@ -499,7 +912,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
 
         ~state() {
-            std::cout << "XXX ACM Destroying State" << std::endl;
+            std::cerr << "XXX ACM Destroying State" << std::endl;
         }
 
         // The dependencies and configuration we were given at
@@ -528,7 +941,15 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         std::unordered_map<std::string, std::string> input_name_remappings;
         std::unordered_map<std::string, std::string> output_name_remappings;
 
+        // As above, but inverted.
+        std::unordered_map<std::string, std::string> input_name_remappings_reversed;
+        std::unordered_map<std::string, std::string> output_name_remappings_reversed;
+
+        vtriton::unique_ptr<TRITONSERVER_ResponseAllocator> allocator;
         vtriton::unique_ptr<TRITONSERVER_Server> server;
+
+        std::mutex mutex;
+        std::stack<vtriton::unique_ptr<TRITONSERVER_InferenceRequest>> inference_requests;
     };
 
     // The mutex and condition variable needed to track our state

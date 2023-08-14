@@ -41,6 +41,8 @@ int main() {
     vtriton::the_shim.ServerOptionsNew = &TRITONSERVER_ServerOptionsNew;
     vtriton::the_shim.ServerDelete = &TRITONSERVER_ServerDelete;
     vtriton::the_shim.ServerNew = &TRITONSERVER_ServerNew;
+    vtriton::the_shim.ServerIsLive = &TRITONSERVER_ServerIsLive;
+    vtriton::the_shim.ServerIsReady = &TRITONSERVER_ServerIsReady;
     vtriton::the_shim.ServerOptionsSetBackendDirectory = &TRITONSERVER_ServerOptionsSetBackendDirectory;
     vtriton::the_shim.ServerOptionsSetLogVerbose = &TRITONSERVER_ServerOptionsSetLogVerbose;
     vtriton::the_shim.ServerOptionsSetMinSupportedComputeCapability =
