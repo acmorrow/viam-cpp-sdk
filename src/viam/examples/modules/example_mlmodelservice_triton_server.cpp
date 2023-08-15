@@ -83,7 +83,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                   vsdk::ResourceConfig configuration) try
         : MLModelService(configuration.name()),
           state_(reconfigure_(std::move(dependencies), std::move(configuration))) {
-        std::cerr << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
+        std::cout << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
                   << std::endl;
     } catch (...) {
         std::cerr << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP" << std::endl;
@@ -91,7 +91,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             throw;
 
         } catch (const std::exception& xcp) {
-            std::cout
+            std::cerr
                 << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP (std::exception) "
                 << xcp.what() << std::endl;
             throw;
@@ -171,7 +171,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     }
 
     std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final try {
-        std::cerr << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
+        std::cout << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
         const auto state = lease_state_();
 
         // TODO: Ensure that enough inputs were provided by comparing with metadata
@@ -220,12 +220,49 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         auto error = TRITONSERVER_InferenceResponseError(inference_response.get());
         if (error) {
             std::ostringstream buffer;
-            buffer << ": Triton Server Inference Error: " << vtriton::the_shim.ErrorCodeString(error) << " - "
+            buffer << ": Triton Server Inference Error: "
+                   << vtriton::the_shim.ErrorCodeString(error) << " - "
                    << vtriton::the_shim.ErrorMessage(error);
             std::cerr << "XXX ACM Inference Failed!" << buffer.str() << std::endl;
             throw std::runtime_error(buffer.str());
         }
+#if 0
+        std::uint32_t num_outputs = 0;
+        vtriton::call(vtriton::the_shim.InferenceResponseOutputCount)(inference_response.get(),
+                                                                      &output_count);
 
+        for (decltype(num_outputs) output_id = 0; output_id != num_outputs; ++output_id) {
+            const char* output_cstr;
+            TRITONSERVER_DataType type;
+            const std::uint64_t* shape;
+            std::uint64_t shape_size;
+            const void* data;
+            std::size_t data_bytes;
+            TRITONSERVER_MemoryType memory_type;
+            std::int64_t memory_type_id;
+
+            vtriton::call(vtriton::the_shim.InferenceResponseOutput)(inference_response.get(),
+                                                                     output_id,
+                                                                     &name,
+                                                                     &type,
+                                                                     &shape,
+                                                                     &shape_size,
+                                                                     &data,
+                                                                     &data_bytes,
+                                                                     &memory_type,
+                                                                     &memory_type_id,
+                                                                     nullptr);
+
+            if (!output_cstr) {
+                // TODO: Log this? Return an error?
+                continue;
+            }
+
+            std::string output(output_cstr);
+            
+        }
+
+#else
         static constexpr std::array<float, 400>
             location_data = {0.1, 0.1, 0.75, 0.75};
         static constexpr std::array<float, 100> category_data = {0};
@@ -250,18 +287,19 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
         auto result = std::make_shared<named_tensor_views>(std::move(tensors));
         return result;
-    } catch(const std::exception& xcp) {
+#endif
+    } catch (const std::exception& xcp) {
         std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with exception: " << xcp.what()
                   << std::endl;
         throw;
-    } catch(...) {
+    } catch (...) {
         std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with an unknown exception"
                   << std::endl;
         throw;
     }
 
     struct metadata metadata() final {
-        std::cerr << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
+        std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
         // Just return a copy of our metadata from leased state.
         const auto state = lease_state_();
         // This metadata is modelled on the results obtained from
@@ -567,7 +605,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             server_options.get(), state->backend_directory.c_str());
 
         // TODO: Parameterize?
-        vtriton::call(vtriton::the_shim.ServerOptionsSetLogVerbose)(server_options.get(), 1);
+        vtriton::call(vtriton::the_shim.ServerOptionsSetLogVerbose)(server_options.get(), 0);
 
         // Needed so we can load a tensorflow model without a config file
         // TODO: Maybe?
@@ -591,7 +629,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             if (result) {
                 vtriton::call(vtriton::the_shim.ServerIsReady)(server.get(), &result);
                 if (result) {
-                    std::cerr << "XXX ACM Triton Server is live and ready" << std::endl;
+                    std::cout << "XXX ACM Triton Server is live and ready" << std::endl;
                     break;
                 }
             }
@@ -611,7 +649,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         vtriton::call(vtriton::the_shim.MessageSerializeToJson)(
             model_metadata, &json_base, &json_size);
         std::string json_string(json_base, json_size);
-        std::cerr << "XXX ACM Model Metadata:" << json_string << std::endl;
+        std::cout << "XXX ACM Model Metadata:" << json_string << std::endl;
 
         // TODO: Parse model metadata
         // TODO: Delete metadata Message
@@ -701,18 +739,18 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             case TRITONSERVER_MEMORY_GPU: {
                 auto cuda_error = cudaSetDevice(memory_type_id);
                 if (cuda_error != cudaSuccess) {
-                    std::cout << service_name
+                    std::cerr << service_name
                               << ": Failed to obtain cuda device when deallocating response data: `"
-                              << cudaGetErrorString(cuda_error) << "` - terminating";
+                              << cudaGetErrorString(cuda_error) << "` - terminating" << std::endl;
                     std::abort();
                 }
                 auto cudaFreeFn =
                     (memory_type == TRITONSERVER_MEMORY_CPU_PINNED) ? cudaFreeHost : cudaFree;
                 cuda_error = cudaFreeFn(buffer);
                 if (cuda_error != cudaSuccess) {
-                    std::cout << service_name
+                    std::cerr << service_name
                               << ": Failed cudaFree[host] when deallocating response data: `"
-                              << cudaGetErrorString(cuda_error) << "` - terminating";
+                              << cudaGetErrorString(cuda_error) << "` - terminating" << std::endl;
                     std::abort();
                 }
                 break;
@@ -722,7 +760,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 break;
             }
             default: {
-                std::cout << service_name
+                std::cerr << service_name
                           << ": Cannot honor request to deallocate unknown MemoryType "
                           << memory_type << " - terminating" << std::endl;
                 std::abort();
@@ -757,7 +795,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     static void release_inference_request_(TRITONSERVER_InferenceRequest* request,
                                            const uint32_t flags,
                                            void* userp) noexcept {
-
         if (flags != TRITONSERVER_REQUEST_RELEASE_ALL) {
             // TODO: Log something
             std::abort();
@@ -790,7 +827,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
         template <typename T>
         cuda_unique_ptr operator()(const T& mlmodel_tensor) const {
-            std::cerr << "XXX ACM Attaching " << name_ << ": [";
+            std::cout << "XXX ACM Attaching " << name_ << ": [";
             for (size_t i = 0; i != mlmodel_tensor.shape().size(); ++i) {
                 std::cout << mlmodel_tensor.shape()[i] << ", ";
             }
@@ -804,7 +841,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 revised_shape[2] = 480;
                 revised_shape[3] = 3;
 
-                std::cerr << "XXX ACM Revised shape for " << name_ << ": [";
+                std::cout << "XXX ACM Revised shape for " << name_ << ": [";
                 for (size_t i = 0; i != revised_shape.size(); ++i) {
                     std::cout << revised_shape[i] << ", ";
                 }
@@ -912,7 +949,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
 
         ~state() {
-            std::cerr << "XXX ACM Destroying State" << std::endl;
+            std::cout << "XXX ACM Destroying State" << std::endl;
         }
 
         // The dependencies and configuration we were given at
@@ -1038,10 +1075,10 @@ int serve(const std::string& socket_path) noexcept try {
 
     return EXIT_SUCCESS;
 } catch (const std::exception& ex) {
-    std::cout << "ERROR: A std::exception was thrown from `serve`: " << ex.what() << std::endl;
+    std::cerr << "ERROR: A std::exception was thrown from `serve`: " << ex.what() << std::endl;
     return EXIT_FAILURE;
 } catch (...) {
-    std::cout << "ERROR: An unknown exception was thrown from `serve`" << std::endl;
+    std::cerr << "ERROR: An unknown exception was thrown from `serve`" << std::endl;
     return EXIT_FAILURE;
 }
 

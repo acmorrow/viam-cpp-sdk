@@ -92,3 +92,7 @@ RUN sudo apt-get install -y nvidia-cudnn8
 RUN curl -L https://github.com/triton-inference-server/server/releases/download/v2.35.0/tritonserver2.35.0-jetpack5.1.2.tgz | tar xfz - -C /opt
 
 RUN sudo apt-get install -y nvidia-cuda-dev
+RUN sudo apt-get install -y libjemalloc2
+
+RUN sudo chmod -R oug+X /opt/tritonserver/
+RUN sudo chmod -R oug+r /opt/tritonserver/
