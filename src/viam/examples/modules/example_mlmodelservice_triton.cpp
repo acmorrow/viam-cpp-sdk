@@ -77,6 +77,9 @@ int main(int argc, char* argv[]) {
     vtriton::the_shim.InferenceRequestSetResponseCallback = &TRITONSERVER_InferenceRequestSetResponseCallback;
     vtriton::the_shim.InferenceRequestDelete = &TRITONSERVER_InferenceRequestDelete;
 
+    vtriton::the_shim.InferenceResponseError = &TRITONSERVER_InferenceResponseError;
+    vtriton::the_shim.InferenceResponseOutputCount = &TRITONSERVER_InferenceResponseOutputCount;
+    vtriton::the_shim.InferenceResponseOutput = &TRITONSERVER_InferenceResponseOutput;
     vtriton::the_shim.InferenceResponseDelete = &TRITONSERVER_InferenceResponseDelete;
 
     auto lemtl = dlopen("libexample_mlmodelservice_triton_server.so", RTLD_NOW);

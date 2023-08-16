@@ -53,8 +53,11 @@ struct shim {
         nullptr;
     decltype(TRITONSERVER_InferenceRequestSetResponseCallback)* InferenceRequestSetResponseCallback =
         nullptr;
-
     decltype(TRITONSERVER_InferenceRequestDelete)* InferenceRequestDelete = nullptr;
+
+    decltype(TRITONSERVER_InferenceResponseError)* InferenceResponseError = nullptr;
+    decltype(TRITONSERVER_InferenceResponseOutputCount)* InferenceResponseOutputCount = nullptr;
+    decltype(TRITONSERVER_InferenceResponseOutput)* InferenceResponseOutput = nullptr;
     decltype(TRITONSERVER_InferenceResponseDelete)* InferenceResponseDelete = nullptr;
 };
 
