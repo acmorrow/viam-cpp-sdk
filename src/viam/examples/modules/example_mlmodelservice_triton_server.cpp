@@ -15,6 +15,8 @@
 #include <pthread.h>
 #include <signal.h>
 
+#include <cuda_runtime_api.h>
+
 #include <condition_variable>
 #include <fstream>
 #include <future>
@@ -28,6 +30,9 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 
+#include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
+
 #include <viam/sdk/components/component.hpp>
 #include <viam/sdk/config/resource.hpp>
 #include <viam/sdk/module/service.hpp>
@@ -37,8 +42,6 @@
 #include <viam/sdk/services/mlmodel/server.hpp>
 
 #include "vtriton.hpp"
-
-#include <cuda_runtime_api.h>
 
 namespace {
 
@@ -171,7 +174,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     }
 
     std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final try {
-        //std::cout << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
+        // std::cout << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
         const auto state = lease_state_();
 
         // TODO: Ensure that enough inputs were provided by comparing with metadata
@@ -227,8 +230,8 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             throw std::runtime_error(buffer.str());
         }
 
-        //std::cerr << "XXX ACM constructing inference_result_type" << std::endl;
-        // TODO: Comment me.
+        // std::cerr << "XXX ACM constructing inference_result_type" << std::endl;
+        //  TODO: Comment me.
         struct inference_result_type {
             std::shared_ptr<struct state> state;
             decltype(inference_response) ir;
@@ -241,9 +244,9 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         vtriton::call(vtriton::the_shim.InferenceResponseOutputCount)(inference_response.get(),
                                                                       &outputs);
 
-        //std::cerr << "XXX ACM counted outputs: " << outputs << std::endl;
+        // std::cerr << "XXX ACM counted outputs: " << outputs << std::endl;
         for (decltype(outputs) output = 0; output != outputs; ++output) {
-            //std::cerr << "XXX ACM working output: " << output << std::endl;
+            // std::cerr << "XXX ACM working output: " << output << std::endl;
 
             const char* output_name_cstr;
             TRITONSERVER_DataType data_type;
@@ -271,7 +274,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 // TODO: Log this? Return an error?
                 continue;
             }
-            //std::cerr << "XXX ACM output is named: " << output_name_cstr << std::endl;
+            // std::cerr << "XXX ACM output is named: " << output_name_cstr << std::endl;
 
             // TODO: Can we avoid some string copies here?
             std::string output_name_string(output_name_cstr);
@@ -280,25 +283,25 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             if (where != state->output_name_remappings.end()) {
                 output_name = &where->second;
             }
-            //std::cerr << "XXX ACM output is renamed: " << *output_name << std::endl;
-            // TODO: Ignore outputs not in metadata?
+            // std::cerr << "XXX ACM output is renamed: " << *output_name << std::endl;
+            //  TODO: Ignore outputs not in metadata?
 
             // If the memory is on the GPU we need to copy it out, since the higher
             // level doesn't know that it can't just memcpy.
             //
             // TODO: We could save a copy here if we got smarter. maybe.
             if (memory_type == TRITONSERVER_MEMORY_GPU) {
-                //std::cerr << "XXX ACM need to copy out of GPU" << std::endl;
+                // std::cerr << "XXX ACM need to copy out of GPU" << std::endl;
                 inference_result->bufs.push_back(std::make_unique<unsigned char[]>(data_bytes));
                 auto allocated = reinterpret_cast<void*>(inference_result->bufs.back().get());
                 const auto cuda_error =
                     cudaMemcpy(allocated, data, data_bytes, cudaMemcpyDeviceToHost);
                 // TODO: cehck cuda_error
                 data = allocated;
-                //std::cerr << "XXX ACM did gpu copy " << cuda_error << std::endl;
+                // std::cerr << "XXX ACM did gpu copy " << cuda_error << std::endl;
             }
 
-            //std::cerr << "XXX ACM making shape vector of size " << shape_size << std::endl;
+            // std::cerr << "XXX ACM making shape vector of size " << shape_size << std::endl;
             std::vector<std::size_t> shape_vector;
             shape_vector.reserve(shape_size);
             for (size_t i = 0; i != shape_size; ++i) {
@@ -312,20 +315,20 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 shape_vector.push_back(static_cast<std::size_t>(val));
             }
 
-            //std::cerr << "XXX ACM making tensor view " << std::endl;
+            // std::cerr << "XXX ACM making tensor view " << std::endl;
             auto tv = make_tensor_view_(data_type, data, data_bytes, std::move(shape_vector));
 
             // TODO: Could conditionally avoid a name copy in the case where
             // we didn't get a name remapping
-            //std::cerr << "XXX ACM emplacing result" << std::endl;
+            // std::cerr << "XXX ACM emplacing result" << std::endl;
             inference_result->ntvs.emplace(*output_name, std::move(tv));
-            //std::cerr << "XXX ACM done with output " << output << std::endl;
+            // std::cerr << "XXX ACM done with output " << output << std::endl;
         }
 
         // Keep the lease on `state` and move ownership of `inference_response` into
         // `inference_result`. Otherwise, the result would return to the pool and our
         // views would no longer be valid.
-        //std::cerr << "XXX ACM stashing state and IR" << std::endl;
+        // std::cerr << "XXX ACM stashing state and IR" << std::endl;
         inference_result->state = std::move(state);
         inference_result->ir = std::move(inference_response);
 
@@ -335,7 +338,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // inference_result object is destroyed, we will return
         // the response to the pool.
         auto* const ntvs = &inference_result->ntvs;
-        //std::cerr << "XXX ACM returning from infer" << std::endl;
+        // std::cerr << "XXX ACM returning from infer" << std::endl;
         return {std::move(inference_result), ntvs};
 
     } catch (const std::exception& xcp) {
@@ -349,9 +352,12 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     }
 
     struct metadata metadata() final {
-        //std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
-        // Just return a copy of our metadata from leased state.
+        // std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
+        //  Just return a copy of our metadata from leased state.
         const auto state = lease_state_();
+#if 1
+        return lease_state_()->metadata;
+#else
         // This metadata is modelled on the results obtained from
         // invoking `Metadata` on a instance of tflite_cpu configured
         // per the instructions and data at
@@ -471,6 +477,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
                   // `extra`
                   {}}}};
+#endif
     }
 
    private:
@@ -679,30 +686,169 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             if (result) {
                 vtriton::call(vtriton::the_shim.ServerIsReady)(server.get(), &result);
                 if (result) {
-                    //std::cout << "XXX ACM Triton Server is live and ready" << std::endl;
+                    // std::cout << "XXX ACM Triton Server is live and ready" << std::endl;
                     break;
                 }
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
         if (!result) {
-            //std::cerr << "XXX ACM Triton Server did not become live and ready" << std::endl;
+            // std::cerr << "XXX ACM Triton Server did not become live and ready" << std::endl;
             throw std::runtime_error("Triton Server did not become live and ready within 30s");
         }
 
-        TRITONSERVER_Message* model_metadata = nullptr;
+        // TODO: Need to clean up this message object
+        TRITONSERVER_Message* model_metadata_message = nullptr;
         vtriton::call(vtriton::the_shim.ServerModelMetadata)(
-            server.get(), state->model_name.c_str(), -1, &model_metadata);
+            server.get(), state->model_name.c_str(), -1, &model_metadata_message);
 
-        const char* json_base;
-        size_t json_size;
+        // TODO: Model version here from config. And where else?
+        const char* model_metadata_json_bytes;
+        size_t model_metadata_json_size;
         vtriton::call(vtriton::the_shim.MessageSerializeToJson)(
-            model_metadata, &json_base, &json_size);
-        std::string json_string(json_base, json_size);
-        //std::cout << "XXX ACM Model Metadata:" << json_string << std::endl;
+            model_metadata_message, &model_metadata_json_bytes, &model_metadata_json_size);
 
-        // TODO: Parse model metadata
-        // TODO: Delete metadata Message
+        rapidjson::Document model_metadata_json;
+        model_metadata_json.Parse(model_metadata_json_bytes, model_metadata_json_size);
+        if (model_metadata_json.HasParseError()) {
+            std::ostringstream buffer;
+            buffer << service_name
+                   << ": Failed parsing model metadata returned by triton server at offset "
+                   << model_metadata_json.GetErrorOffset() << ": "
+                   << rapidjson::GetParseError_En(model_metadata_json.GetParseError());
+            throw std::runtime_error(buffer.str());
+        }
+
+        const auto populate_tensor_infos = [&model_metadata_json](const auto& array,
+                                                                  const auto& name_remappings,
+                                                                  auto* tensor_infos) {
+            static const std::map<std::string, MLModelService::tensor_info::data_types>
+                datatype_map = {{"UINT8", MLModelService::tensor_info::data_types::k_uint8},
+                                {"UINT16", MLModelService::tensor_info::data_types::k_uint16},
+                                {"UINT32", MLModelService::tensor_info::data_types::k_uint32},
+                                {"UINT64", MLModelService::tensor_info::data_types::k_uint64},
+                                {"INT8", MLModelService::tensor_info::data_types::k_int8},
+                                {"INT16", MLModelService::tensor_info::data_types::k_int16},
+                                {"INT32", MLModelService::tensor_info::data_types::k_int32},
+                                {"INT64", MLModelService::tensor_info::data_types::k_int64},
+                                {"FP32", MLModelService::tensor_info::data_types::k_float32},
+                                {"FP64", MLModelService::tensor_info::data_types::k_float64}};
+
+            for (const auto& element : array.GetArray()) {
+                if (!element.IsObject()) {
+                    std::ostringstream buffer;
+                    buffer << service_name
+                           << ": Model metadata array is expected to contain object fields";
+                    throw std::runtime_error(buffer.str());
+                }
+                if (!element.HasMember("name")) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry has no `name` field";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto& name_element = element["name"];
+                if (!name_element.IsString()) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry `name` field is not a string";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto name = name_element.GetString();
+                auto viam_name = name;
+                const auto name_remappings_where = name_remappings.find(name);
+                if (name_remappings_where != name_remappings.end()) {
+                    viam_name = name_remappings_where->second.c_str();
+                }
+
+                if (!element.HasMember("datatype")) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry for tensor `" << name
+                           << "` does not have a `datatype` field";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto& datatype_element = element["datatype"];
+                if (!datatype_element.IsString()) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry `datatype` field for tensor `"
+                           << name << "` is not a string";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto& triton_datatype = datatype_element.GetString();
+                const auto datatype_map_where = datatype_map.find(triton_datatype);
+                if (datatype_map_where == datatype_map.end()) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry `datatype` field for tensor `"
+                           << name << "` contains unsupported data type `" << triton_datatype
+                           << "``";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto viam_datatype = datatype_map_where->second;
+
+                if (!element.HasMember("shape")) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry for tensor `" << name
+                           << "` does not have a `shape` field";
+                    throw std::runtime_error(buffer.str());
+                }
+                const auto& shape_element = element["shape"];
+                if (!shape_element.IsArray()) {
+                    std::ostringstream buffer;
+                    buffer << service_name << ": Model metadata entry `shape` field for tensor `"
+                           << name << "` is not an array";
+                    throw std::runtime_error(buffer.str());
+                }
+
+                std::vector<int> shape;
+                for (const auto& shape_element_entry : shape_element.GetArray()) {
+                    if (!shape_element_entry.IsInt()) {
+                        std::ostringstream buffer;
+                        buffer << service_name
+                               << ": Model metadata entry `shape` field for tensor `" << name
+                               << "` contained a non-integer value";
+                    }
+                    shape.push_back(shape_element_entry.GetInt());
+                }
+
+                tensor_infos->push_back({
+                    // `name`
+                    viam_name,
+
+                    // `description`
+                    "",
+
+                    // `data_type`
+                    viam_datatype,
+
+                    // `shape`
+                    std::move(shape),
+                });
+            }
+        };
+
+        if (!model_metadata_json.HasMember("inputs")) {
+            std::ostringstream buffer;
+            buffer << service_name << ": Model metadata does not include an `inputs` field";
+            throw std::runtime_error(buffer.str());
+        }
+        const auto& inputs = model_metadata_json["inputs"];
+        if (!inputs.IsArray()) {
+            std::ostringstream buffer;
+            buffer << service_name << ": Model metadata `inputs` field is not an array";
+            throw std::runtime_error(buffer.str());
+        }
+        populate_tensor_infos(inputs, state->input_name_remappings, &state->metadata.inputs);
+
+        if (!model_metadata_json.HasMember("outputs")) {
+            std::ostringstream buffer;
+            buffer << service_name << ": Model metadata does not include an `outputs` field";
+            throw std::runtime_error(buffer.str());
+        }
+        const auto& outputs = model_metadata_json["outputs"];
+        if (!outputs.IsArray()) {
+            std::ostringstream buffer;
+            buffer << service_name << ": Model metadata `outputs` field is not an array";
+            throw std::runtime_error(buffer.str());
+        }
+        populate_tensor_infos(outputs, state->output_name_remappings, &state->metadata.outputs);
 
         state->allocator = std::move(allocator);
         state->server = std::move(server);
@@ -983,46 +1129,46 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                    std::vector<std::size_t>&& shape_vector) {
         switch (data_type) {
             case TRITONSERVER_TYPE_INT8: {
-                //std::cerr << "XXX ACM Making std::int8_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::int8_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int8_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT8: {
-                //std::cerr << "XXX ACM Making std::uint8_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::uint8_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint8_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT16: {
-                //std::cerr << "XXX ACM Making std::int16_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::int16_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int16_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT16: {
-                //std::cerr << "XXX ACM Making std::uint16_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::uint16_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint16_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT32: {
-                //std::cerr << "XXX ACM Making std::int32_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::int32_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int32_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT32: {
-                //std::cerr << "XXX ACM Making std::uint32_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::uint32_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint32_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT64: {
-                //std::cerr << "XXX ACM Making std::int64_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::int64_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int64_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT64: {
-                //std::cerr << "XXX ACM Making std::uint64_t tensor" << std::endl;
+                // std::cerr << "XXX ACM Making std::uint64_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint64_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_FP32: {
-                //std::cerr << "XXX ACM Making float tensor" << std::endl;
+                // std::cerr << "XXX ACM Making float tensor" << std::endl;
                 return make_tensor_view_t_<float>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_FP64: {
-                //std::cerr << "XXX ACM Making double tensor" << std::endl;
+                // std::cerr << "XXX ACM Making double tensor" << std::endl;
                 return make_tensor_view_t_<double>(data, data_bytes, std::move(shape_vector));
             }
             default: {
@@ -1040,17 +1186,17 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                      std::vector<std::size_t>&& shape_vector) {
         const auto* const typed_data = reinterpret_cast<const T*>(data);
         const auto typed_size = data_bytes / sizeof(*typed_data);
-        //std::cerr << "XXX ACM Data " << data << " of " << data_bytes << " bytes is " << typed_size << " elements" << std::endl;
-        //std::cerr << "XXX ACM shape vector is: [";
-        //for (const auto elt : shape_vector) {
-        //    std::cerr << elt << ", ";
-        //}
-        //std::cerr << "]" << std::endl;
-        //std::cerr << "XXX ACM first 10 elements of data vector is: [";
-        //for (size_t i = 0; i < 10 && i < typed_size; ++i) {
-        //    std::cerr << typed_data[i] << ", ";
-        //}
-        //std::cerr << "]" << std::endl;
+        // std::cerr << "XXX ACM Data " << data << " of " << data_bytes << " bytes is " <<
+        // typed_size << " elements" << std::endl; std::cerr << "XXX ACM shape vector is: ["; for
+        // (const auto elt : shape_vector) {
+        //     std::cerr << elt << ", ";
+        // }
+        // std::cerr << "]" << std::endl;
+        // std::cerr << "XXX ACM first 10 elements of data vector is: [";
+        // for (size_t i = 0; i < 10 && i < typed_size; ++i) {
+        //     std::cerr << typed_data[i] << ", ";
+        // }
+        // std::cerr << "]" << std::endl;
 
         return MLModelService::make_tensor_view(typed_data, typed_size, std::move(shape_vector));
     }
@@ -1066,7 +1212,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
 
         ~state() {
-            //std::cout << "XXX ACM Destroying State" << std::endl;
+            // std::cout << "XXX ACM Destroying State" << std::endl;
         }
 
         // The dependencies and configuration we were given at
@@ -1087,6 +1233,11 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // triton service will bind to.
         std::string model_name;
 
+        // Metadata about input and output tensors that was extracted
+        // during configuration. Callers need this in order to know
+        // how to interact with the service.
+        struct MLModelService::metadata metadata;
+
         // Tensor renamings as extracted from our configuration. The
         // keys are the names of the tensors per the model, the values
         // are the names of the tensors clients expect to see / use
@@ -1099,9 +1250,13 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         std::unordered_map<std::string, std::string> input_name_remappings_reversed;
         std::unordered_map<std::string, std::string> output_name_remappings_reversed;
 
+        // The response allocator and server this state will use.
+        //
+        // TODO: Pooling?
         vtriton::unique_ptr<TRITONSERVER_ResponseAllocator> allocator;
         vtriton::unique_ptr<TRITONSERVER_Server> server;
 
+        // Inference requests are pooled and reused.
         std::mutex mutex;
         std::stack<vtriton::unique_ptr<TRITONSERVER_InferenceRequest>> inference_requests;
     };
