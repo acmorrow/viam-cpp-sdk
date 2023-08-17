@@ -656,7 +656,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                     std::ostringstream buffer;
                     buffer << service_name << ": Model metadata entry `datatype` field for tensor `"
                            << name << "` contains unsupported data type `" << triton_datatype
-                           << "``";
+                           << "`";
                     throw std::runtime_error(buffer.str());
                 }
                 const auto viam_datatype = datatype_map_where->second;
@@ -685,6 +685,17 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                     }
                     shape.push_back(shape_element_entry.GetInt());
                 }
+
+                std::cout << "XXX ACM ADDING METADATA" <<
+                    "triton name: " << name << " "
+                    "viam name: " << viam_name << " "
+                    "triton datatype: " << triton_datatype << " "
+                    "viam datatype: " << (int)viam_datatype << " "
+                    "shape: [";
+                for (const auto& elt : shape) {
+                    std::cout << elt << ", ";
+                }
+                std::cout << "]" << std::endl;
 
                 tensor_infos->push_back({
                     // `name`
