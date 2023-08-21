@@ -83,22 +83,9 @@ static const auto cuda_deleter = [](void* ptr) {
 class MLModelServiceTriton : public vsdk::MLModelService {
    public:
     explicit MLModelServiceTriton(vsdk::Dependencies dependencies,
-                                  vsdk::ResourceConfig configuration) try
+                                  vsdk::ResourceConfig configuration)
         : MLModelService(configuration.name()),
           state_(reconfigure_(std::move(dependencies), std::move(configuration))) {
-        std::cout << "XXX ACM MLModelServiceTriton: instantiated as '" << this->name() << "'"
-                  << std::endl;
-    } catch (...) {
-        std::cerr << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP" << std::endl;
-        try {
-            throw;
-
-        } catch (const std::exception& xcp) {
-            std::cerr
-                << "XXX ACM MLModelServiceTriton::MLModelServiceTriton CTOR XCP (std::exception) "
-                << xcp.what() << std::endl;
-            throw;
-        }
     }
 
     ~MLModelServiceTriton() final {
@@ -173,8 +160,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         throw;
     }
 
-    std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final try {
-        // std::cout << "XXX ACM MLModelServiceTriton: recieved `infer` invocation" << std::endl;
+    std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final {
         const auto state = lease_state_();
 
         // TODO: Ensure that enough inputs were provided by comparing with metadata
@@ -226,11 +212,9 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             buffer << ": Triton Server Inference Error: "
                    << vtriton::the_shim.ErrorCodeString(error) << " - "
                    << vtriton::the_shim.ErrorMessage(error);
-            std::cerr << "XXX ACM Inference Failed!" << buffer.str() << std::endl;
             throw std::runtime_error(buffer.str());
         }
 
-        // std::cerr << "XXX ACM constructing inference_result_type" << std::endl;
         //  TODO: Comment me.
         struct inference_result_type {
             std::shared_ptr<struct state> state;
@@ -244,10 +228,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         vtriton::call(vtriton::the_shim.InferenceResponseOutputCount)(inference_response.get(),
                                                                       &outputs);
 
-        // std::cerr << "XXX ACM counted outputs: " << outputs << std::endl;
         for (decltype(outputs) output = 0; output != outputs; ++output) {
-            // std::cerr << "XXX ACM working output: " << output << std::endl;
-
             const char* output_name_cstr;
             TRITONSERVER_DataType data_type;
             const std::int64_t* shape;
@@ -274,7 +255,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 // TODO: Log this? Return an error?
                 continue;
             }
-            // std::cerr << "XXX ACM output is named: " << output_name_cstr << std::endl;
 
             // TODO: Can we avoid some string copies here?
             std::string output_name_string(output_name_cstr);
@@ -283,7 +263,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             if (where != state->output_name_remappings.end()) {
                 output_name = &where->second;
             }
-            // std::cerr << "XXX ACM output is renamed: " << *output_name << std::endl;
+
             //  TODO: Ignore outputs not in metadata?
 
             // If the memory is on the GPU we need to copy it out, since the higher
@@ -291,17 +271,14 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             //
             // TODO: We could save a copy here if we got smarter. maybe.
             if (memory_type == TRITONSERVER_MEMORY_GPU) {
-                // std::cerr << "XXX ACM need to copy out of GPU" << std::endl;
                 inference_result->bufs.push_back(std::make_unique<unsigned char[]>(data_bytes));
                 auto allocated = reinterpret_cast<void*>(inference_result->bufs.back().get());
                 const auto cuda_error =
                     cudaMemcpy(allocated, data, data_bytes, cudaMemcpyDeviceToHost);
                 // TODO: cehck cuda_error
                 data = allocated;
-                // std::cerr << "XXX ACM did gpu copy " << cuda_error << std::endl;
             }
 
-            // std::cerr << "XXX ACM making shape vector of size " << shape_size << std::endl;
             std::vector<std::size_t> shape_vector;
             shape_vector.reserve(shape_size);
             for (size_t i = 0; i != shape_size; ++i) {
@@ -315,20 +292,16 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 shape_vector.push_back(static_cast<std::size_t>(val));
             }
 
-            // std::cerr << "XXX ACM making tensor view " << std::endl;
             auto tv = make_tensor_view_(data_type, data, data_bytes, std::move(shape_vector));
 
             // TODO: Could conditionally avoid a name copy in the case where
             // we didn't get a name remapping
-            // std::cerr << "XXX ACM emplacing result" << std::endl;
             inference_result->ntvs.emplace(*output_name, std::move(tv));
-            // std::cerr << "XXX ACM done with output " << output << std::endl;
         }
 
         // Keep the lease on `state` and move ownership of `inference_response` into
         // `inference_result`. Otherwise, the result would return to the pool and our
         // views would no longer be valid.
-        // std::cerr << "XXX ACM stashing state and IR" << std::endl;
         inference_result->state = std::move(state);
         inference_result->ir = std::move(inference_response);
 
@@ -338,22 +311,11 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // inference_result object is destroyed, we will return
         // the response to the pool.
         auto* const ntvs = &inference_result->ntvs;
-        // std::cerr << "XXX ACM returning from infer" << std::endl;
         return {std::move(inference_result), ntvs};
-
-    } catch (const std::exception& xcp) {
-        std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with exception: " << xcp.what()
-                  << std::endl;
-        throw;
-    } catch (...) {
-        std::cerr << "XXX ACM MLModelServiceTriton: Infer failed with an unknown exception"
-                  << std::endl;
-        throw;
     }
 
     struct metadata metadata() final {
-        // std::cout << "XXX ACM MLModelServiceTriton: recieved `metadata` invocation" << std::endl;
-        //  Just return a copy of our metadata from leased state.
+        // Just return a copy of our metadata from leased state.
         const auto state = lease_state_();
         return lease_state_()->metadata;
     }
@@ -564,14 +526,12 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             if (result) {
                 vtriton::call(vtriton::the_shim.ServerIsReady)(server.get(), &result);
                 if (result) {
-                    // std::cout << "XXX ACM Triton Server is live and ready" << std::endl;
                     break;
                 }
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
         if (!result) {
-            // std::cerr << "XXX ACM Triton Server did not become live and ready" << std::endl;
             throw std::runtime_error("Triton Server did not become live and ready within 30s");
         }
 
@@ -685,24 +645,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                     }
                     shape.push_back(shape_element_entry.GetInt());
                 }
-
-                std::cout << "XXX ACM ADDING METADATA"
-                          << "triton name: " << name
-                          << " "
-                             "viam name: "
-                          << viam_name
-                          << " "
-                             "triton datatype: "
-                          << triton_datatype
-                          << " "
-                             "viam datatype: "
-                          << (int)viam_datatype
-                          << " "
-                             "shape: [";
-                for (const auto& elt : shape) {
-                    std::cout << elt << ", ";
-                }
-                std::cout << "]" << std::endl;
 
                 tensor_infos->push_back({
                     // `name`
@@ -919,36 +861,12 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
         template <typename T>
         cuda_unique_ptr operator()(const T& mlmodel_tensor) const {
-            std::vector<std::size_t> revised_shape(mlmodel_tensor.shape());
-            // TODO: We need real metadata!
-            if (mlmodel_tensor.shape().size() == 1) {
-                revised_shape.assign(4, 0UL);
-                if (mlmodel_tensor.shape()[0] == 75) {
-                    std::cerr << "XXX ACM 5x5" << std::endl;
-                    revised_shape[0] = 1;
-                    revised_shape[1] = 5;
-                    revised_shape[2] = 5;
-                    revised_shape[3] = 3;
-                } else if (mlmodel_tensor.shape()[0] == 2764800) {
-                    std::cerr << "XXX ACM 720x1280" << std::endl;
-                    revised_shape[0] = 1;
-                    revised_shape[1] = 720;
-                    revised_shape[2] = 1280;
-                    revised_shape[3] = 3;
-                }
-            } else {
-                std::cout << "XXX ACM TRITON SHAPE: [";
-                for (const auto& elt : mlmodel_tensor.shape()) {
-                    std::cout << elt << ", ";
-                }
-                std::cout << "]" << std::endl;
-            }
             vtriton::call(vtriton::the_shim.InferenceRequestAddInput)(
                 request_,
                 name_->c_str(),
                 triton_datatype_for_(mlmodel_tensor),
-                reinterpret_cast<const int64_t*>(&revised_shape[0]),
-                revised_shape.size());
+                reinterpret_cast<const int64_t*>(mlmodel_tensor.shape().data()),  // Should we just eat the copy?
+                mlmodel_tensor.shape().size());
 
             const auto* const mlmodel_data_begin =
                 reinterpret_cast<const unsigned char*>(mlmodel_tensor.data());
@@ -1040,46 +958,36 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                    std::vector<std::size_t>&& shape_vector) {
         switch (data_type) {
             case TRITONSERVER_TYPE_INT8: {
-                // std::cerr << "XXX ACM Making std::int8_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int8_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT8: {
-                // std::cerr << "XXX ACM Making std::uint8_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint8_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT16: {
-                // std::cerr << "XXX ACM Making std::int16_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int16_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT16: {
-                // std::cerr << "XXX ACM Making std::uint16_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint16_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT32: {
-                // std::cerr << "XXX ACM Making std::int32_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int32_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT32: {
-                // std::cerr << "XXX ACM Making std::uint32_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint32_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_INT64: {
-                // std::cerr << "XXX ACM Making std::int64_t tensor" << std::endl;
                 return make_tensor_view_t_<std::int64_t>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_UINT64: {
-                // std::cerr << "XXX ACM Making std::uint64_t tensor" << std::endl;
                 return make_tensor_view_t_<std::uint64_t>(
                     data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_FP32: {
-                // std::cerr << "XXX ACM Making float tensor" << std::endl;
                 return make_tensor_view_t_<float>(data, data_bytes, std::move(shape_vector));
             }
             case TRITONSERVER_TYPE_FP64: {
-                // std::cerr << "XXX ACM Making double tensor" << std::endl;
                 return make_tensor_view_t_<double>(data, data_bytes, std::move(shape_vector));
             }
             default: {
@@ -1097,18 +1005,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                      std::vector<std::size_t>&& shape_vector) {
         const auto* const typed_data = reinterpret_cast<const T*>(data);
         const auto typed_size = data_bytes / sizeof(*typed_data);
-        // std::cerr << "XXX ACM Data " << data << " of " << data_bytes << " bytes is " <<
-        // typed_size << " elements" << std::endl; std::cerr << "XXX ACM shape vector is: ["; for
-        // (const auto elt : shape_vector) {
-        //     std::cerr << elt << ", ";
-        // }
-        // std::cerr << "]" << std::endl;
-        // std::cerr << "XXX ACM first 10 elements of data vector is: [";
-        // for (size_t i = 0; i < 10 && i < typed_size; ++i) {
-        //     std::cerr << typed_data[i] << ", ";
-        // }
-        // std::cerr << "]" << std::endl;
-
         return MLModelService::make_tensor_view(typed_data, typed_size, std::move(shape_vector));
     }
 
@@ -1121,10 +1017,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     struct state {
         explicit state(vsdk::Dependencies dependencies, vsdk::ResourceConfig configuration)
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
-
-        ~state() {
-            // std::cout << "XXX ACM Destroying State" << std::endl;
-        }
 
         // The dependencies and configuration we were given at
         // construction / reconfiguration.
