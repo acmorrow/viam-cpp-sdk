@@ -686,12 +686,19 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                     shape.push_back(shape_element_entry.GetInt());
                 }
 
-                std::cout << "XXX ACM ADDING METADATA" <<
-                    "triton name: " << name << " "
-                    "viam name: " << viam_name << " "
-                    "triton datatype: " << triton_datatype << " "
-                    "viam datatype: " << (int)viam_datatype << " "
-                    "shape: [";
+                std::cout << "XXX ACM ADDING METADATA"
+                          << "triton name: " << name
+                          << " "
+                             "viam name: "
+                          << viam_name
+                          << " "
+                             "triton datatype: "
+                          << triton_datatype
+                          << " "
+                             "viam datatype: "
+                          << (int)viam_datatype
+                          << " "
+                             "shape: [";
                 for (const auto& elt : shape) {
                     std::cout << elt << ", ";
                 }
@@ -916,10 +923,25 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             // TODO: We need real metadata!
             if (mlmodel_tensor.shape().size() == 1) {
                 revised_shape.assign(4, 0UL);
-                revised_shape[0] = 1;
-                revised_shape[1] = 640;
-                revised_shape[2] = 480;
-                revised_shape[3] = 3;
+                if (mlmodel_tensor.shape()[0] == 75) {
+                    std::cerr << "XXX ACM 5x5" << std::endl;
+                    revised_shape[0] = 1;
+                    revised_shape[1] = 5;
+                    revised_shape[2] = 5;
+                    revised_shape[3] = 3;
+                } else if (mlmodel_tensor.shape()[0] == 2764800) {
+                    std::cerr << "XXX ACM 720x1280" << std::endl;
+                    revised_shape[0] = 1;
+                    revised_shape[1] = 720;
+                    revised_shape[2] = 1280;
+                    revised_shape[3] = 3;
+                }
+            } else {
+                std::cout << "XXX ACM TRITON SHAPE: [";
+                for (const auto& elt : mlmodel_tensor.shape()) {
+                    std::cout << elt << ", ";
+                }
+                std::cout << "]" << std::endl;
             }
             vtriton::call(vtriton::the_shim.InferenceRequestAddInput)(
                 request_,
