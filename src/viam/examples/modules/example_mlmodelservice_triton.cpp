@@ -25,10 +25,10 @@ const std::string usage = "usage: example_mlmodelservice_triton /path/to/unix/so
 }  // namespace
 
 int main(int argc, char* argv[]) {
-
     if (argc < 2) {
         std::cout << service_name << "ERROR: insufficient arguments\n";
-        std::cout << usage << std::endl;;
+        std::cout << usage << std::endl;
+        ;
         return EXIT_FAILURE;
     }
 
@@ -57,8 +57,7 @@ int main(int argc, char* argv[]) {
     vtriton::the_shim.ServerInferAsync = &TRITONSERVER_ServerInferAsync;
     vtriton::the_shim.ServerDelete = &TRITONSERVER_ServerDelete;
 
-    vtriton::the_shim.ServerModelMetadata =
-        &TRITONSERVER_ServerModelMetadata;
+    vtriton::the_shim.ServerModelMetadata = &TRITONSERVER_ServerModelMetadata;
     vtriton::the_shim.MessageSerializeToJson = &TRITONSERVER_MessageSerializeToJson;
 
     vtriton::the_shim.ResponseAllocatorNew = &TRITONSERVER_ResponseAllocatorNew;
@@ -71,10 +70,11 @@ int main(int argc, char* argv[]) {
         &TRITONSERVER_InferenceRequestRemoveAllInputs;
     vtriton::the_shim.InferenceRequestRemoveAllRequestedOutputs =
         &TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs;
-    vtriton::the_shim.InferenceRequestAddInput =
-        &TRITONSERVER_InferenceRequestAddInput;
-    vtriton::the_shim.InferenceRequestAppendInputData = &TRITONSERVER_InferenceRequestAppendInputData;
-    vtriton::the_shim.InferenceRequestSetResponseCallback = &TRITONSERVER_InferenceRequestSetResponseCallback;
+    vtriton::the_shim.InferenceRequestAddInput = &TRITONSERVER_InferenceRequestAddInput;
+    vtriton::the_shim.InferenceRequestAppendInputData =
+        &TRITONSERVER_InferenceRequestAppendInputData;
+    vtriton::the_shim.InferenceRequestSetResponseCallback =
+        &TRITONSERVER_InferenceRequestSetResponseCallback;
     vtriton::the_shim.InferenceRequestDelete = &TRITONSERVER_InferenceRequestDelete;
 
     vtriton::the_shim.InferenceResponseError = &TRITONSERVER_InferenceResponseError;
@@ -85,7 +85,8 @@ int main(int argc, char* argv[]) {
     auto lemtl = dlopen("libexample_mlmodelservice_triton_server.so", RTLD_NOW);
     if (!lemtl) {
         const auto err = dlerror();
-        std::cout << service_name << ": Failed to open libexample_mlmodelservice_triton_server.so Library: " << err;
+        std::cout << service_name
+                  << ": Failed to open libexample_mlmodelservice_triton_server.so Library: " << err;
         return EXIT_FAILURE;
     }
 
@@ -96,5 +97,6 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    return reinterpret_cast<int(*)(vtriton::shim*, const char*)>(lemtl_serve)(&vtriton::the_shim, argv[1]);
+    return reinterpret_cast<int (*)(vtriton::shim*, const char*)>(lemtl_serve)(&vtriton::the_shim,
+                                                                               argv[1]);
 }

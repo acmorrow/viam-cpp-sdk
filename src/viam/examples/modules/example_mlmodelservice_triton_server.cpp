@@ -85,8 +85,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     explicit MLModelServiceTriton(vsdk::Dependencies dependencies,
                                   vsdk::ResourceConfig configuration)
         : MLModelService(configuration.name()),
-          state_(reconfigure_(std::move(dependencies), std::move(configuration))) {
-    }
+          state_(reconfigure_(std::move(dependencies), std::move(configuration))) {}
 
     ~MLModelServiceTriton() final {
         // All invocations arrive via gRPC, so we know we are idle
@@ -865,7 +864,8 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 request_,
                 name_->c_str(),
                 triton_datatype_for_(mlmodel_tensor),
-                reinterpret_cast<const int64_t*>(mlmodel_tensor.shape().data()),  // Should we just eat the copy?
+                reinterpret_cast<const int64_t*>(
+                    mlmodel_tensor.shape().data()),  // Should we just eat the copy?
                 mlmodel_tensor.shape().size());
 
             const auto* const mlmodel_data_begin =

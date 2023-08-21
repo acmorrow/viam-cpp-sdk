@@ -45,14 +45,13 @@ struct shim {
         nullptr;
     decltype(TRITONSERVER_InferenceRequestRemoveAllInputs)* InferenceRequestRemoveAllInputs =
         nullptr;
-    decltype(TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs)* InferenceRequestRemoveAllRequestedOutputs =
-        nullptr;
-    decltype(TRITONSERVER_InferenceRequestAddInput)* InferenceRequestAddInput =
-        nullptr;
+    decltype(TRITONSERVER_InferenceRequestRemoveAllRequestedOutputs)*
+        InferenceRequestRemoveAllRequestedOutputs = nullptr;
+    decltype(TRITONSERVER_InferenceRequestAddInput)* InferenceRequestAddInput = nullptr;
     decltype(TRITONSERVER_InferenceRequestAppendInputData)* InferenceRequestAppendInputData =
         nullptr;
-    decltype(TRITONSERVER_InferenceRequestSetResponseCallback)* InferenceRequestSetResponseCallback =
-        nullptr;
+    decltype(TRITONSERVER_InferenceRequestSetResponseCallback)*
+        InferenceRequestSetResponseCallback = nullptr;
     decltype(TRITONSERVER_InferenceRequestDelete)* InferenceRequestDelete = nullptr;
 
     decltype(TRITONSERVER_InferenceResponseError)* InferenceResponseError = nullptr;
