@@ -31,13 +31,17 @@ struct shim {
     decltype(TRITONSERVER_ServerNew)* ServerNew = nullptr;
     decltype(TRITONSERVER_ServerIsLive)* ServerIsLive = nullptr;
     decltype(TRITONSERVER_ServerIsReady)* ServerIsReady = nullptr;
+    decltype(TRITONSERVER_ServerModelIsReady)* ServerModelIsReady = nullptr;
     decltype(TRITONSERVER_ServerInferAsync)* ServerInferAsync = nullptr;
     decltype(TRITONSERVER_ServerDelete)* ServerDelete = nullptr;
 
     decltype(TRITONSERVER_ServerModelMetadata)* ServerModelMetadata = nullptr;
     decltype(TRITONSERVER_MessageSerializeToJson)* MessageSerializeToJson = nullptr;
+    decltype(TRITONSERVER_MessageDelete)* MessageDelete = nullptr;
 
     decltype(TRITONSERVER_ResponseAllocatorNew)* ResponseAllocatorNew = nullptr;
+    decltype(TRITONSERVER_ResponseAllocatorSetQueryFunction)* ResponseAllocatorSetQueryFunction =
+        nullptr;
     decltype(TRITONSERVER_ResponseAllocatorDelete)* ResponseAllocatorDelete = nullptr;
 
     decltype(TRITONSERVER_InferenceRequestNew)* InferenceRequestNew = nullptr;
@@ -184,6 +188,15 @@ struct lifecycle_traits<TRITONSERVER_InferenceResponse> {
     template <class... Args>
     static auto dtor(Args&&... args) {
         call(the_shim.InferenceResponseDelete)(std::forward<Args>(args)...);
+    };
+};
+
+template <>
+struct lifecycle_traits<TRITONSERVER_Message> {
+    using value_type = TRITONSERVER_Message;
+    template <class... Args>
+    static auto dtor(Args&&... args) {
+        call(the_shim.MessageDelete)(std::forward<Args>(args)...);
     };
 };
 

@@ -28,7 +28,6 @@ int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cout << service_name << "ERROR: insufficient arguments\n";
         std::cout << usage << std::endl;
-        ;
         return EXIT_FAILURE;
     }
 
@@ -54,13 +53,16 @@ int main(int argc, char* argv[]) {
     vtriton::the_shim.ServerNew = &TRITONSERVER_ServerNew;
     vtriton::the_shim.ServerIsLive = &TRITONSERVER_ServerIsLive;
     vtriton::the_shim.ServerIsReady = &TRITONSERVER_ServerIsReady;
+    vtriton::the_shim.ServerModelIsReady = &TRITONSERVER_ServerModelIsReady;
     vtriton::the_shim.ServerInferAsync = &TRITONSERVER_ServerInferAsync;
     vtriton::the_shim.ServerDelete = &TRITONSERVER_ServerDelete;
 
     vtriton::the_shim.ServerModelMetadata = &TRITONSERVER_ServerModelMetadata;
     vtriton::the_shim.MessageSerializeToJson = &TRITONSERVER_MessageSerializeToJson;
+    vtriton::the_shim.MessageDelete = &TRITONSERVER_MessageDelete;
 
     vtriton::the_shim.ResponseAllocatorNew = &TRITONSERVER_ResponseAllocatorNew;
+    vtriton::the_shim.ResponseAllocatorSetQueryFunction = &TRITONSERVER_ResponseAllocatorSetQueryFunction;
     vtriton::the_shim.ResponseAllocatorDelete = &TRITONSERVER_ResponseAllocatorDelete;
 
     vtriton::the_shim.InferenceRequestNew = &TRITONSERVER_InferenceRequestNew;

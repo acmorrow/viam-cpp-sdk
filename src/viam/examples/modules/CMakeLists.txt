@@ -73,12 +73,14 @@ option(VIAMCPPSDK_BUILD_TRITON_EXAMPLE_MODULE "Select whether to build the trito
 
 if (VIAMCPPSDK_BUILD_TRITON_EXAMPLE_MODULE)
   find_package(CUDAToolkit REQUIRED)
+  # TODO: RapidJson
 
   add_library(example_mlmodelservice_triton_server
     example_mlmodelservice_triton_server.cpp
   )
 
   target_include_directories(example_mlmodelservice_triton_server
+    # TODO: TritonServer installation location variable
     PRIVATE /opt/tritonserver/include/tritonserver
   )
 

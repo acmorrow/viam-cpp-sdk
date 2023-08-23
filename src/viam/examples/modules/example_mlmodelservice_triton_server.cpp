@@ -48,35 +48,20 @@ namespace {
 namespace vsdk = ::viam::sdk;
 constexpr char service_name[] = "example_mlmodelservice_triton";
 
-static const auto cuda_deleter = [](void* ptr) {
-    if (!ptr)
-        return;
-
-    cudaPointerAttributes cuda_attrs;
-    auto cuda_error = cudaPointerGetAttributes(&cuda_attrs, ptr);
-    // TODO: examine error and (throw?)
-    // TODO: set device?
-    switch (cuda_attrs.type) {
-        case cudaMemoryTypeDevice: {
-            cuda_error = cudaFree(ptr);
-            break;
+template <typename Stdex = std::runtime_error, typename... Args>
+auto call_cuda(cudaError_t (*fn)(Args... args)) noexcept {
+    return [=](Args... args) {
+        const auto error = fn(args...);
+        if (error != cudaSuccess) {
+            std::ostringstream buffer;
+            buffer << cudaGetErrorString(error);
+            throw Stdex(buffer.str());
         }
-        case cudaMemoryTypeHost: {
-            cuda_error = cudaFreeHost(ptr);
-            break;
-        }
-        default: {
-            // TODO: abort?
-        }
-    }
-    // TODO: examine error
-};
-
-// A namespace to bind unique_ptr and shared_ptr to the triton types in handy ways. Also
-// provides other helpers specialized to interacting with the triton API, like vtriton::call.
+    };
+}
 
 // An example MLModelService instance which runs many models via the
-// NVidia Triton Server API.x
+// NVidia Triton Server API.
 //
 // Configuration requires the following parameters:
 //    TODO
@@ -105,7 +90,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             std::lock_guard<std::mutex> lock(state_lock_);
             if (!stopped_) {
                 stopped_ = true;
-                std::shared_ptr<state> state;
+                std::shared_ptr<struct state_> state;
                 swap(state_, state);
                 state_ready_.notify_all();
             }
@@ -130,7 +115,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // hold, and new invocations will block on the state becoming
         // populated.
         using std::swap;
-        std::shared_ptr<state> state;
+        std::shared_ptr<struct state_> state;
         {
             // Wait until we have a state in play, then take
             // ownership, so that we don't race with other
@@ -162,12 +147,10 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     std::shared_ptr<named_tensor_views> infer(const named_tensor_views& inputs) final {
         const auto state = lease_state_();
 
-        // TODO: Ensure that enough inputs were provided by comparing with metadata
-
         auto inference_request = get_inference_request_(state);
 
         // Attach inputs to the inference request
-        std::stack<cuda_unique_ptr> cuda_allocations;
+        std::stack<cuda_unique_ptr_> cuda_allocations;
         for (const auto& kv : inputs) {
             const std::string* input_name = &kv.first;
             const auto where = state->input_name_remappings_reversed.find(*input_name);
@@ -176,10 +159,8 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             }
             inference_request_input_visitor_ visitor(input_name,
                                                      inference_request.get(),
-                                                     // TODO: config option?
-                                                     TRITONSERVER_MEMORY_GPU,
-                                                     // TODO: config option?
-                                                     0);
+                                                     state->preferred_input_memory_type,
+                                                     state->preferred_input_memory_type_id);
             cuda_allocations.push(boost::apply_visitor(visitor, kv.second));
         }
 
@@ -214,9 +195,16 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             throw std::runtime_error(buffer.str());
         }
 
-        //  TODO: Comment me.
+        // The result object we return to our parent. We keep our
+        // lease on the state to anchor the existence of everything
+        // else. We will take ownership of the inference response so
+        // it doesn't return to the pool, which would clear the output
+        // state. We have a slot for an accumulated buffers we need to
+        // own for copies out of the GPU. And then we have the tensor
+        // views that cover buffers either in the inference response
+        // or in the bufs.
         struct inference_result_type {
-            std::shared_ptr<struct state> state;
+            std::shared_ptr<struct state_> state;
             decltype(inference_response) ir;
             std::vector<std::unique_ptr<unsigned char[]>> bufs;
             named_tensor_views ntvs;
@@ -251,30 +239,28 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                                      &userp);
 
             if (!output_name_cstr) {
-                // TODO: Log this? Return an error?
-                continue;
+                std::ostringstream buffer;
+                buffer << service_name
+                       << ": Model returned anonymous output tensor which cannot be returned ";
+                throw std::runtime_error(buffer.str());
             }
 
-            // TODO: Can we avoid some string copies here?
-            std::string output_name_string(output_name_cstr);
-            const std::string* output_name = &output_name_string;
-            const auto where = state->output_name_remappings.find(output_name_string);
+            std::string output_name(output_name_cstr);
+            const auto where = state->output_name_remappings.find(output_name);
             if (where != state->output_name_remappings.end()) {
-                output_name = &where->second;
+                output_name = where->second;
             }
-
-            //  TODO: Ignore outputs not in metadata?
 
             // If the memory is on the GPU we need to copy it out, since the higher
             // level doesn't know that it can't just memcpy.
             //
-            // TODO: We could save a copy here if we got smarter. maybe.
+            // TODO: We could save a copy here if we got smarter. Maybe. We would need a way
+            // to tunnel back to the upper layer (mlmodel/server.cpp) that it needs to use
+            // `cudaMemcpy` when writing to the protobuf.
             if (memory_type == TRITONSERVER_MEMORY_GPU) {
                 inference_result->bufs.push_back(std::make_unique<unsigned char[]>(data_bytes));
                 auto allocated = reinterpret_cast<void*>(inference_result->bufs.back().get());
-                const auto cuda_error =
-                    cudaMemcpy(allocated, data, data_bytes, cudaMemcpyDeviceToHost);
-                // TODO: cehck cuda_error
+                call_cuda(cudaMemcpy)(allocated, data, data_bytes, cudaMemcpyDeviceToHost);
                 data = allocated;
             }
 
@@ -285,7 +271,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                 if (val < 0) {
                     std::ostringstream buffer;
                     buffer << service_name << ": Model returned negative value " << val
-                           << " in shape for output " << *output_name;
+                           << " in shape for output " << output_name;
                     throw std::runtime_error(buffer.str());
                 }
                 shape_vector.push_back(static_cast<std::size_t>(val));
@@ -293,12 +279,10 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
             auto tv = make_tensor_view_(data_type, data, data_bytes, std::move(shape_vector));
 
-            // TODO: Could conditionally avoid a name copy in the case where
-            // we didn't get a name remapping
-            inference_result->ntvs.emplace(*output_name, std::move(tv));
+            inference_result->ntvs.emplace(std::move(output_name), std::move(tv));
         }
 
-        // Keep the lease on `state` and move ownership of `inference_response` into
+        // Move the lease on `state` and ownership of `inference_response` into
         // `inference_result`. Otherwise, the result would return to the pool and our
         // views would no longer be valid.
         inference_result->state = std::move(state);
@@ -320,7 +304,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     }
 
    private:
-    struct state;
+    struct state_;
 
     void check_stopped_inlock_() const {
         if (stopped_) {
@@ -330,7 +314,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         }
     }
 
-    std::shared_ptr<state> lease_state_() {
+    std::shared_ptr<struct state_> lease_state_() {
         // Wait for our state to be valid or stopped and then obtain a
         // shared_ptr to state if valid, incrementing the refcount, or
         // throws if the service is stopped. We don't need to deal
@@ -343,11 +327,10 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         return state_;
     }
 
-    static std::shared_ptr<state> reconfigure_(vsdk::Dependencies dependencies,
-                                               vsdk::ResourceConfig configuration) {
-        // return std::make_shared<state>();
+    static std::shared_ptr<struct state_> reconfigure_(vsdk::Dependencies dependencies,
+                                                       vsdk::ResourceConfig configuration) {
         auto state =
-            std::make_shared<struct state>(std::move(dependencies), std::move(configuration));
+            std::make_shared<struct state_>(std::move(dependencies), std::move(configuration));
 
         // Validate that our dependencies (if any - we don't actually
         // expect any for this service) exist. If we did have
@@ -388,7 +371,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                       "or is an empty string";
             throw std::invalid_argument(buffer.str());
         }
-        // TODO(acm): Maybe validate path is a readable directory, if triton doesn't do so.
         state->model_repo_path = std::move(*model_repo_path_string);
 
         // Pull the backend directory out of the configuration.
@@ -412,7 +394,6 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                       "or is an empty string";
             throw std::invalid_argument(buffer.str());
         }
-        // TODO(acm): Maybe validate path is a readable directory, if triton doesn't do so.
         state->backend_directory = std::move(*backend_directory_string);
 
         // Pull the model name out of the configuration.
@@ -434,6 +415,67 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             throw std::invalid_argument(buffer.str());
         }
         state->model_name = std::move(*model_name_string);
+
+        auto model_version = attributes->find("model_version");
+        if (model_version != attributes->end()) {
+            auto* const model_version_value = model_version->second->get<double>();
+            if (!model_version_value || (*model_version_value < 1) ||
+                (std::nearbyint(*model_version_value) != *model_version_value)) {
+                std::ostringstream buffer;
+                buffer << service_name
+                       << ": Optional parameter `model_version` was provided, but is not a natural "
+                          "number";
+                throw std::invalid_argument(buffer.str());
+            }
+            state->model_version = static_cast<std::int64_t>(*model_version_value);
+        }
+
+        auto preferred_input_memory_type = attributes->find("preferred_input_memory_type");
+        if (preferred_input_memory_type != attributes->end()) {
+            auto* const preferred_input_memory_type_value =
+                preferred_input_memory_type->second->get<std::string>();
+            if (!preferred_input_memory_type_value) {
+                std::ostringstream buffer;
+                buffer
+                    << service_name
+                    << ": Optional parameter `preferred_input_memory_type` was provided, but it is "
+                       "not a string";
+                throw std::invalid_argument(buffer.str());
+            }
+            if (*preferred_input_memory_type_value == "cpu") {
+                state->preferred_input_memory_type = TRITONSERVER_MEMORY_CPU;
+            } else if (*preferred_input_memory_type_value == "cpu-pinned") {
+                state->preferred_input_memory_type = TRITONSERVER_MEMORY_CPU_PINNED;
+            } else if (*preferred_input_memory_type_value == "gpu") {
+                state->preferred_input_memory_type = TRITONSERVER_MEMORY_GPU;
+            } else {
+                std::ostringstream buffer;
+                buffer << service_name
+                       << ": Optional parameter `preferred_input_memory_type` was provided, but is "
+                          "not "
+                          "one of `cpu`, `cpu-pinned`, or `gpu`";
+                throw std::invalid_argument(buffer.str());
+            }
+        }
+
+        auto preferred_input_memory_type_id = attributes->find("preferred_input_memory_type_id");
+        if (preferred_input_memory_type_id != attributes->end()) {
+            auto* const preferred_input_memory_type_id_value =
+                preferred_input_memory_type_id->second->get<double>();
+            if (!preferred_input_memory_type_id_value ||
+                (*preferred_input_memory_type_id_value < 0) ||
+                (std::nearbyint(*preferred_input_memory_type_id_value) !=
+                 *preferred_input_memory_type_id_value)) {
+                std::ostringstream buffer;
+                buffer << service_name
+                       << ": Optional parameter `preferred_input_memory_type_id` was provided, but "
+                          "it is "
+                          "not a non-negative integer";
+                throw std::invalid_argument(buffer.str());
+            }
+            state->preferred_input_memory_type_id =
+                static_cast<std::int64_t>(*preferred_input_memory_type_id_value);
+        }
 
         // Process any tensor name remappings provided in the config.
         auto remappings = attributes->find("tensor_name_remappings");
@@ -504,46 +546,44 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         vtriton::call(vtriton::the_shim.ServerOptionsSetLogVerbose)(server_options.get(), 0);
 
         // Needed so we can load a tensorflow model without a config file
-        // TODO: Maybe?
         vtriton::call(vtriton::the_shim.ServerOptionsSetStrictModelConfig)(server_options.get(),
                                                                            false);
 
-        // Per https://developer.nvidia.com/cuda-gpus, 5.3 is the lowest
-        // value for all of the Jetson Line.
-        //
-        // TODO: Does setting this low constrain our GPU utilization in ways
-        // that we don't like?
-        vtriton::call(vtriton::the_shim.ServerOptionsSetMinSupportedComputeCapability)(
-            server_options.get(), 8.7);
-
         auto server = vtriton::make_unique<TRITONSERVER_Server>(server_options.get());
 
-        // TODO: These limits / timeouts should probably be configurable.
+        // TODO(RSDK-4663): For now, we are hardcoding a wait that is
+        // a subset of the RDK default timeout.
+        const size_t timeout_seconds = 30;
         bool result = false;
-        for (size_t tries = 0; tries != 30; ++tries) {
+        for (size_t tries = 0; !result && (tries != timeout_seconds); ++tries) {
             vtriton::call(vtriton::the_shim.ServerIsLive)(server.get(), &result);
             if (result) {
-                vtriton::call(vtriton::the_shim.ServerIsReady)(server.get(), &result);
-                if (result) {
-                    break;
+                vtriton::call(vtriton::the_shim.ServerModelIsReady)(
+                    server.get(), state->model_name.c_str(), state->model_version, &result);
+                if (!result) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                 }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
         if (!result) {
-            throw std::runtime_error("Triton Server did not become live and ready within 30s");
+            std::ostringstream buffer;
+            buffer << service_name << "Triton Server did not become live and ready within "
+                   << timeout_seconds << " seconds.";
+            throw std::runtime_error(buffer.str());
         }
 
-        // TODO: Need to clean up this message object
-        TRITONSERVER_Message* model_metadata_message = nullptr;
-        vtriton::call(vtriton::the_shim.ServerModelMetadata)(
-            server.get(), state->model_name.c_str(), -1, &model_metadata_message);
+        vtriton::unique_ptr<TRITONSERVER_Message> model_metadata_message;
+        {
+            TRITONSERVER_Message* out = nullptr;
+            vtriton::call(vtriton::the_shim.ServerModelMetadata)(
+                server.get(), state->model_name.c_str(), state->model_version, &out);
+            model_metadata_message = vtriton::take_unique(out);
+        }
 
-        // TODO: Model version here from config. And where else?
         const char* model_metadata_json_bytes;
         size_t model_metadata_json_size;
         vtriton::call(vtriton::the_shim.MessageSerializeToJson)(
-            model_metadata_message, &model_metadata_json_bytes, &model_metadata_json_size);
+            model_metadata_message.get(), &model_metadata_json_bytes, &model_metadata_json_size);
 
         rapidjson::Document model_metadata_json;
         model_metadata_json.Parse(model_metadata_json_bytes, model_metadata_json_size);
@@ -703,7 +743,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                   void** buffer_userp,
                                                   TRITONSERVER_MemoryType* actual_memory_type,
                                                   std::int64_t* actual_memory_type_id) noexcept {
-        auto* const state = reinterpret_cast<struct state*>(userp);
+        auto* const state = reinterpret_cast<struct state_*>(userp);
         *buffer_userp = state;
 
         if (!byte_size) {
@@ -752,7 +792,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         }
 
         // We made it!
-        *buffer_userp = nullptr;  // userp?
+        *buffer_userp = state;
         *actual_memory_type = memory_type;
         *actual_memory_type_id = memory_type_id;
 
@@ -765,7 +805,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                                     std::size_t byte_size,
                                                     TRITONSERVER_MemoryType memory_type,
                                                     std::int64_t memory_type_id) noexcept {
-        auto* const state = reinterpret_cast<struct state*>(buffer_userp);
+        auto* const state = reinterpret_cast<struct state_*>(buffer_userp);
 
         switch (memory_type) {
             case TRITONSERVER_MEMORY_CPU_PINNED:  // Fallthrough
@@ -804,7 +844,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     }
 
     vtriton::unique_ptr<TRITONSERVER_InferenceRequest> get_inference_request_(
-        const std::shared_ptr<struct state>& state) {
+        const std::shared_ptr<struct state_>& state) {
         vtriton::unique_ptr<TRITONSERVER_InferenceRequest> result;
         {
             std::unique_lock<std::mutex> lock(state->mutex);
@@ -815,9 +855,8 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             }
         }
 
-        // TODO: Should model version be a config parameter?
         result = vtriton::make_unique<TRITONSERVER_InferenceRequest>(
-            state->server.get(), state->model_name.c_str(), -1);
+            state->server.get(), state->model_name.c_str(), state->model_version);
 
         vtriton::call(vtriton::the_shim.InferenceRequestSetReleaseCallback)(
             result.get(), &release_inference_request_, state.get());
@@ -829,7 +868,10 @@ class MLModelServiceTriton : public vsdk::MLModelService {
                                            const uint32_t flags,
                                            void* userp) noexcept {
         if (flags != TRITONSERVER_REQUEST_RELEASE_ALL) {
-            // TODO: Log something
+            std::cerr << service_name
+                      << ": Unhandled request to release inference request without RELEASE_ALL - "
+                         "terminating"
+                      << std::endl;
             std::abort();
         }
 
@@ -837,17 +879,50 @@ class MLModelServiceTriton : public vsdk::MLModelService {
             auto taken = vtriton::take_unique(request);
             vtriton::call(vtriton::the_shim.InferenceRequestRemoveAllInputs)(taken.get());
             vtriton::call(vtriton::the_shim.InferenceRequestRemoveAllRequestedOutputs)(taken.get());
-            auto* const state = reinterpret_cast<struct state*>(userp);
+            auto* const state = reinterpret_cast<struct state_*>(userp);
             std::unique_lock<std::mutex> lock(state->mutex);
+            // TODO: Should there be a maximum pool size?
             state->inference_requests.push(std::move(taken));
         } catch (...) {
-            // TODO: log?
+            std::cerr << service_name
+                      << ": Attempt to return an InferenceRequest to the pool failed" << std::endl;
         }
     }
 
-    using cuda_unique_ptr = std::unique_ptr<void, decltype(cuda_deleter)>;
+    struct cuda_deleter_ {
+        void operator()(void* ptr) noexcept try {
+            if (!ptr)
+                return;
 
-    class inference_request_input_visitor_ : public boost::static_visitor<cuda_unique_ptr> {
+            cudaPointerAttributes cuda_attrs;
+            call_cuda(cudaPointerGetAttributes)(&cuda_attrs, ptr);
+            call_cuda(cudaSetDevice)(cuda_attrs.device);
+            switch (cuda_attrs.type) {
+                case cudaMemoryTypeDevice: {
+                    return call_cuda(cudaFree)(ptr);
+                }
+                case cudaMemoryTypeHost: {
+                    return call_cuda(cudaFreeHost)(ptr);
+                }
+                default: {
+                std:
+                    std::cerr << service_name << "Unsupported CUDA memory type to free - aborting: "
+                              << cuda_attrs.type;
+                    std::abort();
+                }
+            }
+        } catch (const std::exception& xcp) {
+            std::cerr << service_name << "Failed to free CUDA memory - aborting: " << xcp.what();
+            abort();
+        } catch (...) {
+            std::cerr << service_name << "Failed to free CUDA memory - aborting";
+            abort();
+        }
+    };
+
+    using cuda_unique_ptr_ = std::unique_ptr<void, cuda_deleter_>;
+
+    class inference_request_input_visitor_ : public boost::static_visitor<cuda_unique_ptr_> {
        public:
         inference_request_input_visitor_(const std::string* name,
                                          TRITONSERVER_InferenceRequest* request,
@@ -859,13 +934,13 @@ class MLModelServiceTriton : public vsdk::MLModelService {
               memory_type_id_(memory_type_id) {}
 
         template <typename T>
-        cuda_unique_ptr operator()(const T& mlmodel_tensor) const {
+        cuda_unique_ptr_ operator()(const T& mlmodel_tensor) const {
+            // TODO: Should we just eat the copy rather than reinterpreting?
             vtriton::call(vtriton::the_shim.InferenceRequestAddInput)(
                 request_,
                 name_->c_str(),
                 triton_datatype_for_(mlmodel_tensor),
-                reinterpret_cast<const int64_t*>(
-                    mlmodel_tensor.shape().data()),  // Should we just eat the copy?
+                reinterpret_cast<const int64_t*>(mlmodel_tensor.shape().data()),
                 mlmodel_tensor.shape().size());
 
             const auto* const mlmodel_data_begin =
@@ -877,23 +952,22 @@ class MLModelServiceTriton : public vsdk::MLModelService {
 
             void* alloc = nullptr;
             const void* data = nullptr;
-            cuda_unique_ptr result(nullptr, cuda_deleter);
+            cuda_unique_ptr_ result;
             switch (memory_type_) {
                 case TRITONSERVER_MEMORY_GPU: {
-                    auto cuda_error = cudaMalloc(&alloc, mlmodel_data_size);
-                    cuda_error = cudaMemcpy(
+                    call_cuda(cudaSetDevice)(memory_type_id_);
+                    call_cuda(cudaMalloc)(&alloc, mlmodel_data_size);
+                    call_cuda(cudaMemcpy)(
                         alloc, mlmodel_data_begin, mlmodel_data_size, cudaMemcpyHostToDevice);
-                    // TODO: check cuda errors
                     result.reset(alloc);
                     data = alloc;
                     break;
                 }
                 case TRITONSERVER_MEMORY_CPU_PINNED: {
-                    auto cuda_error =
-                        cudaHostAlloc(&alloc, mlmodel_data_size, cudaHostAllocPortable);
-                    cuda_error = cudaMemcpy(
+                    call_cuda(cudaSetDevice)(memory_type_id_);
+                    call_cuda(cudaHostAlloc)(&alloc, mlmodel_data_size, cudaHostAllocPortable);
+                    call_cuda(cudaMemcpy)(
                         alloc, mlmodel_data_begin, mlmodel_data_size, cudaMemcpyHostToHost);
-                    // TODO: check cuda_errors
                     result.reset(alloc);
                     data = alloc;
                     break;
@@ -1014,8 +1088,8 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     // atomically swap it in on success. Existing invocations will
     // continue to work against the old state, and new invocations
     // will pick up the new state.
-    struct state {
-        explicit state(vsdk::Dependencies dependencies, vsdk::ResourceConfig configuration)
+    struct state_ {
+        explicit state_(vsdk::Dependencies dependencies, vsdk::ResourceConfig configuration)
             : dependencies(std::move(dependencies)), configuration(std::move(configuration)) {}
 
         // The dependencies and configuration we were given at
@@ -1035,6 +1109,19 @@ class MLModelServiceTriton : public vsdk::MLModelService {
         // The name of the specific model that this instance of the
         // triton service will bind to.
         std::string model_name;
+
+        // The model version. Defaults to `-1` to mean the latest deployed
+        // version of the named model, but can be set explicitly in the configuration
+        // to bind to an older version.
+        std::int64_t model_version = -1;
+
+        // If the user did not specify a memory type, default to CPU
+        TRITONSERVER_MemoryType preferred_input_memory_type = TRITONSERVER_MEMORY_CPU;
+
+        // The preferred memory type id. Effectively, this is the
+        // device on which we wish to allocate, when it matters. If not
+        // specified, we bind to device 0.
+        std::int64_t preferred_input_memory_type_id = 0;
 
         // Metadata about input and output tensors that was extracted
         // during configuration. Callers need this in order to know
@@ -1068,7 +1155,7 @@ class MLModelServiceTriton : public vsdk::MLModelService {
     // across concurrent reconfiguration and invocation.
     std::mutex state_lock_;
     std::condition_variable state_ready_;
-    std::shared_ptr<state> state_;
+    std::shared_ptr<struct state_> state_;
     bool stopped_ = false;
 };
 
@@ -1095,7 +1182,7 @@ int serve(const std::string& socket_path) noexcept try {
                << " but have " << triton_version_major << "." << triton_version_minor << ".";
         throw std::domain_error(buffer.str());
     }
-    std::cout << service_name << ": Running Triton API (via dlopen)" << triton_version_major << "."
+    std::cout << service_name << ": Running Triton API: " << triton_version_major << "."
               << triton_version_minor << std::endl;
 
     // Create a new model registration for the service.
