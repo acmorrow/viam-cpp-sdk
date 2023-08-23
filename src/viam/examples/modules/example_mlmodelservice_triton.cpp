@@ -62,7 +62,8 @@ int main(int argc, char* argv[]) {
     vtriton::the_shim.MessageDelete = &TRITONSERVER_MessageDelete;
 
     vtriton::the_shim.ResponseAllocatorNew = &TRITONSERVER_ResponseAllocatorNew;
-    vtriton::the_shim.ResponseAllocatorSetQueryFunction = &TRITONSERVER_ResponseAllocatorSetQueryFunction;
+    vtriton::the_shim.ResponseAllocatorSetQueryFunction =
+        &TRITONSERVER_ResponseAllocatorSetQueryFunction;
     vtriton::the_shim.ResponseAllocatorDelete = &TRITONSERVER_ResponseAllocatorDelete;
 
     vtriton::the_shim.InferenceRequestNew = &TRITONSERVER_InferenceRequestNew;
