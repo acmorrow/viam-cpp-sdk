@@ -1,0 +1,22 @@
+Import(['env'])
+
+env = env.Clone()
+
+env.AppendUnique(
+    CPPPATH=[
+        '$VARIANT_DIR/src',
+        '$VARIANT_DIR/src/api',
+    ],
+    CCFLAGS=[
+        '-Werror',
+    ],
+ )
+
+env.SConscript(
+    dirs=[
+        'viam',
+    ],
+    exports={
+        'env' : env.Clone(),
+    },
+)

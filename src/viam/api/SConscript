@@ -1,0 +1,54 @@
+Import(['env'])
+
+env = env.Clone()
+
+AddOption(
+    '--viamcppsdk-use-dynamic-protos',
+    dest="viamcppsdk-use-dynamic-protos",
+    nargs='?',
+    type='choice',
+    choices=[True, False],
+    default=False,
+    const=True,
+)
+
+if GetOption('viamcppsdk-use-dynamic-protos') == True:
+    pass
+
+
+env.SharedLibrary(
+    target='viamapi',
+    source=[
+        'app/v1/app.grpc.pb.cc',
+        'app/v1/app.pb.cc',
+        'app/v1/robot.grpc.pb.cc',
+        'app/v1/robot.pb.cc',
+        'common/v1/common.grpc.pb.cc',
+        'common/v1/common.pb.cc',
+        'component/base/v1/base.grpc.pb.cc',
+        'component/base/v1/base.pb.cc',
+        'component/board/v1/board.grpc.pb.cc',
+        'component/board/v1/board.pb.cc',
+        'component/camera/v1/camera.grpc.pb.cc',
+        'component/camera/v1/camera.pb.cc',
+        'component/encoder/v1/encoder.grpc.pb.cc',
+        'component/encoder/v1/encoder.pb.cc',
+        'component/generic/v1/generic.grpc.pb.cc',
+        'component/generic/v1/generic.pb.cc',
+        'component/motor/v1/motor.grpc.pb.cc',
+        'component/motor/v1/motor.pb.cc',
+        'google/api/annotations.pb.cc',
+        'google/api/http.pb.cc',
+        'google/api/httpbody.pb.cc',
+        'module/v1/module.grpc.pb.cc',
+        'module/v1/module.pb.cc',
+        'robot/v1/robot.grpc.pb.cc',
+        'robot/v1/robot.pb.cc',
+        'service/mlmodel/v1/mlmodel.grpc.pb.cc',
+        'service/mlmodel/v1/mlmodel.pb.cc',
+        'service/motion/v1/motion.grpc.pb.cc',
+        'service/motion/v1/motion.pb.cc',
+        'tagger/v1/tagger.grpc.pb.cc',
+        'tagger/v1/tagger.pb.cc',
+    ],
+)
