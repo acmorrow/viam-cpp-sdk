@@ -56,4 +56,21 @@ env.SharedLibrary(
         'spatialmath/orientation_types.cpp',
         'spatialmath/orientation.cpp',
     ],
+    LIBS=[
+        'absl_cord',
+        'absl_cord_internal',
+        'absl_cordz_info',
+        'absl_hash',
+        'absl_log_internal_check_op',
+        'absl_log_internal_message',
+        'absl_log_internal_nullguard',
+        'boost_log-mt',
+        'gpr',
+        'grpc',
+        'grpc++',
+        'grpc++_reflection',
+        'protobuf',
+        'viam_rust_utils',
+        'viamapi',
+    ]
 )

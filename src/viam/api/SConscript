@@ -12,43 +12,116 @@ AddOption(
     const=True,
 )
 
+# TODO: Local api generation
+
+src_dir = env.Dir('.')
+
+generated_source_paths = [
+    'app/v1/app.grpc.pb.cc',
+    'app/v1/app.pb.cc',
+    'app/v1/robot.grpc.pb.cc',
+    'app/v1/robot.pb.cc',
+    'common/v1/common.grpc.pb.cc',
+    'common/v1/common.pb.cc',
+    'component/base/v1/base.grpc.pb.cc',
+    'component/base/v1/base.pb.cc',
+    'component/board/v1/board.grpc.pb.cc',
+    'component/board/v1/board.pb.cc',
+    'component/camera/v1/camera.grpc.pb.cc',
+    'component/camera/v1/camera.pb.cc',
+    'component/encoder/v1/encoder.grpc.pb.cc',
+    'component/encoder/v1/encoder.pb.cc',
+    'component/generic/v1/generic.grpc.pb.cc',
+    'component/generic/v1/generic.pb.cc',
+    'component/motor/v1/motor.grpc.pb.cc',
+    'component/motor/v1/motor.pb.cc',
+    'google/api/annotations.pb.cc',
+    'google/api/httpbody.pb.cc',
+    'google/api/http.pb.cc',
+    'module/v1/module.grpc.pb.cc',
+    'module/v1/module.pb.cc',
+    'robot/v1/robot.grpc.pb.cc',
+    'robot/v1/robot.pb.cc',
+    'service/mlmodel/v1/mlmodel.grpc.pb.cc',
+    'service/mlmodel/v1/mlmodel.pb.cc',
+    'service/motion/v1/motion.grpc.pb.cc',
+    'service/motion/v1/motion.pb.cc',
+    'tagger/v1/tagger.grpc.pb.cc',
+    'tagger/v1/tagger.pb.cc',
+]
+
+generated_header_paths = [
+    'app/v1/app.grpc.pb.h',
+    'app/v1/app.pb.h',
+    'app/v1/robot.grpc.pb.h',
+    'app/v1/robot.pb.h',
+    'common/v1/common.grpc.pb.h',
+    'common/v1/common.pb.h',
+    'component/base/v1/base.grpc.pb.h',
+    'component/base/v1/base.pb.h',
+    'component/board/v1/board.grpc.pb.h',
+    'component/board/v1/board.pb.h',
+    'component/camera/v1/camera.grpc.pb.h',
+    'component/camera/v1/camera.pb.h',
+    'component/encoder/v1/encoder.grpc.pb.h',
+    'component/encoder/v1/encoder.pb.h',
+    'component/generic/v1/generic.grpc.pb.h',
+    'component/generic/v1/generic.pb.h',
+    'component/motor/v1/motor.grpc.pb.h',
+    'component/motor/v1/motor.pb.h',
+    'google/api/annotations.pb.h',
+    'google/api/httpbody.pb.h',
+    'google/api/http.pb.h',
+    'module/v1/module.grpc.pb.h',
+    'module/v1/module.pb.h',
+    'robot/v1/robot.grpc.pb.h',
+    'robot/v1/robot.pb.h',
+    'service/mlmodel/v1/mlmodel.grpc.pb.h',
+    'service/mlmodel/v1/mlmodel.pb.h',
+    'service/motion/v1/motion.grpc.pb.h',
+    'service/motion/v1/motion.pb.h',
+    'tagger/v1/tagger.grpc.pb.h',
+    'tagger/v1/tagger.pb.h',
+]
+
 if GetOption('viamcppsdk-use-dynamic-protos') == True:
-    pass
+
+    src_dir = env.Dir('gen/viam/api')
+
+    buf_yaml = env.Substfile(
+        target='config/buf.gen.yaml',
+        source='config/buf.gen.remote.plugin.yaml.in',
+        SUBST_DICT={
+            '@VIAMCPPSDK_GRPCXX_VERSION@' : '1.59.1',
+        },
+    )
+
+    env.Command(
+        source=buf_yaml,
+        target=env.File(generated_source_paths, directory=src_dir),
+        action=[
+            '$BUF generate buf.build/viamrobotics/goutils --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}',
+            '$BUF generate buf.build/googleapis/googleapis  --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR} --path google/rpc --path google/api',
+            '$BUF generate buf.build/viamrobotics/api --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}',
+        ],
+        BUF_OUTPUT_DIR=env.Dir('.'),
+    )
 
 
 env.SharedLibrary(
     target='viamapi',
-    source=[
-        'app/v1/app.grpc.pb.cc',
-        'app/v1/app.pb.cc',
-        'app/v1/robot.grpc.pb.cc',
-        'app/v1/robot.pb.cc',
-        'common/v1/common.grpc.pb.cc',
-        'common/v1/common.pb.cc',
-        'component/base/v1/base.grpc.pb.cc',
-        'component/base/v1/base.pb.cc',
-        'component/board/v1/board.grpc.pb.cc',
-        'component/board/v1/board.pb.cc',
-        'component/camera/v1/camera.grpc.pb.cc',
-        'component/camera/v1/camera.pb.cc',
-        'component/encoder/v1/encoder.grpc.pb.cc',
-        'component/encoder/v1/encoder.pb.cc',
-        'component/generic/v1/generic.grpc.pb.cc',
-        'component/generic/v1/generic.pb.cc',
-        'component/motor/v1/motor.grpc.pb.cc',
-        'component/motor/v1/motor.pb.cc',
-        'google/api/annotations.pb.cc',
-        'google/api/http.pb.cc',
-        'google/api/httpbody.pb.cc',
-        'module/v1/module.grpc.pb.cc',
-        'module/v1/module.pb.cc',
-        'robot/v1/robot.grpc.pb.cc',
-        'robot/v1/robot.pb.cc',
-        'service/mlmodel/v1/mlmodel.grpc.pb.cc',
-        'service/mlmodel/v1/mlmodel.pb.cc',
-        'service/motion/v1/motion.grpc.pb.cc',
-        'service/motion/v1/motion.pb.cc',
-        'tagger/v1/tagger.grpc.pb.cc',
-        'tagger/v1/tagger.pb.cc',
-    ],
+    source=env.File(generated_source_paths, directory=src_dir),
+    LIBS=[
+        'absl_cord',
+        'absl_cord_internal',
+        'absl_cordz_info',
+        'absl_hash',
+        'absl_log_internal_check_op',
+        'absl_log_internal_message',
+        'absl_log_internal_nullguard',
+        'gpr',
+        'grpc',
+        'grpc++',
+        'protobuf',
+    ]
 )

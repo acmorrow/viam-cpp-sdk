@@ -31,6 +31,11 @@ variables = Variables(
 )
 
 variables.Add(
+    'BUF',
+    default=WhereIs('buf'),
+)
+
+variables.Add(
     'BUILD_DIR',
     default='#/build',
 )
@@ -52,6 +57,12 @@ variables.Add(
 
 variables.Add(
     'CPPPATH',
+    default=[],
+    converter=shlex.split,
+)
+
+variables.Add(
+    'LIBPATH',
     default=[],
     converter=shlex.split,
 )
