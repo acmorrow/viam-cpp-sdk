@@ -14,10 +14,17 @@ EnsureSConsVersion(4, 5)
 # local to a sub-tree should be declared in the associated SConstruct.
 #
 
+# --variants-paths=p1,p2...pn
+# --variants=a,b,c
+# 
+
 #
 # SCons options are set here.
 #
 
+# Always randomize build order, to shake out dependency issues and to
+# avoid racing on the cache when two builders are building
+# concurrently but sharing a cache.
 SetOption('random', 1)
 
 
@@ -43,6 +50,11 @@ variables.Add(
 )
 
 variables.Add(
+    'CACHE_DIR',
+    default='$SCONS_DIR/cache',
+)
+
+variables.Add(
     'CCFLAGS',
     converter=shlex.split,
 )
@@ -59,18 +71,51 @@ variables.Add(
 
 variables.Add(
     'CPPPATH',
+    converter=shlex.split,
+)
+
+variables.Add(
+    ('PLUS_CPPPATH', '+CPPPATH'),
+    default=[],
+    converter=shlex.split,
+)
+
+variables.Add(
+    ('CPPPATH_PLUS', 'CPPPATH+'),
     default=[],
     converter=shlex.split,
 )
 
 variables.Add(
     'LIBPATH',
-    default=[],
+    default=None,
     converter=shlex.split,
 )
 
 variables.Add(
+    'PLATFORM',
+    default=None,
+)
+
+variables.Add(
+    'SCONS_DIR',
+    default='$BUILD_DIR/scons',
+)
+
+variables.Add(
     'TOOLS',
+    converter=lambda x: ['predefault'] + shlex.split(x) + ['postdefault'],
+    default=['default']
+)
+
+variables.Add(
+    ('PREDEFAULT_TOOLS', '+TOOLS'),
+    converter=shlex.split,
+    default=[],
+)
+
+variables.Add(
+    ('POSTDEFAULT_TOOLS', 'TOOLS+'),
     converter=shlex.split,
     default=[],
 )
@@ -87,8 +132,27 @@ variables.Add(
 
 env = Environment(
     variables=variables,
-    VARIANT_DIR='$BUILD_DIR/$VARIANT',
+    VARIANT_DIR='$BUILD_DIR/variants/$VARIANT',
 )
+
+# Apply any PLUS_ or _PLUS variables, per our convention
+fixup = env.Clone()
+for k,v in env.items():
+    if k.startswith('PLUS_'):
+        fixup.Prepend(**{k[len('PLUS_'):] : v})
+        del fixup[k]
+    elif k.endswith('_PLUS'):
+        fixup.Append(**{k[:len('_PLUS')] : v})
+        del fixup[k]
+env = fixup
+
+
+#
+# SCons configuration goes here
+#
+
+env.SConsignFile('${__env__.Dir(SCONS_DIR)}/sconsign')
+env.CacheDir('${__env__.Dir(CACHE_DIR)}')
 
 
 #
