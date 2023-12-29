@@ -1,3 +1,5 @@
+# -*- mode: python; -*-
+
 import shlex
 
 # Bypass expensive tool initialization on startup

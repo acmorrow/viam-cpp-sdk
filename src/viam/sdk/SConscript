@@ -1,3 +1,5 @@
+# -*- mode: python; -*-
+
 Import(['env'])
 
 env = env.Clone()
@@ -5,10 +7,12 @@ env = env.Clone()
 env.SharedLibrary(
     target='viamsdk',
     source=[
-        'registry/registry.cpp',
+        'registry/registry.cpp', # Note: Must be first for bad link order reasons
+        'common/client_helper.cpp',
         'common/linear_algebra.cpp',
         'common/pose.cpp',
         'common/proto_type.cpp',
+        'common/service_helper.cpp',
         'common/utils.cpp',
         'common/world_state.cpp',
         'components/base/base.cpp',
@@ -30,16 +34,26 @@ env.SharedLibrary(
         'components/motor/motor.cpp',
         'components/motor/client.cpp',
         'components/motor/server.cpp',
+        'components/movement_sensor/client.cpp',
+        'components/movement_sensor/movement_sensor.cpp',
+        'components/movement_sensor/server.cpp',
+        'components/power_sensor/client.cpp',
+        'components/power_sensor/power_sensor.cpp',
+        'components/power_sensor/server.cpp',
+        'components/sensor/client.cpp',
+        'components/sensor/sensor.cpp',
+        'components/sensor/server.cpp',
         'config/resource.cpp',
         'module/handler_map.cpp',
         'module/module.cpp',
         'module/service.cpp',
+        'module/signal_manager.cpp',
         'referenceframe/frame.cpp',
         'resource/resource.cpp',
         'resource/resource_api.cpp',
         'resource/resource_manager.cpp',
         'resource/resource_server_base.cpp',
-        'resource/resource_type.cpp',
+        'resource/stoppable.cpp',
         'robot/client.cpp',
         'robot/service.cpp',
         'rpc/dial.cpp',

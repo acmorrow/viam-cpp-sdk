@@ -1,3 +1,5 @@
+# -*- mode: python; -*-
+
 Import(['env'])
 
 env = env.Clone()
@@ -16,73 +18,85 @@ AddOption(
 
 src_dir = env.Dir('.')
 
-generated_source_paths = [
-    'app/v1/app.grpc.pb.cc',
-    'app/v1/app.pb.cc',
-    'app/v1/robot.grpc.pb.cc',
-    'app/v1/robot.pb.cc',
-    'common/v1/common.grpc.pb.cc',
-    'common/v1/common.pb.cc',
-    'component/base/v1/base.grpc.pb.cc',
-    'component/base/v1/base.pb.cc',
-    'component/board/v1/board.grpc.pb.cc',
-    'component/board/v1/board.pb.cc',
-    'component/camera/v1/camera.grpc.pb.cc',
-    'component/camera/v1/camera.pb.cc',
-    'component/encoder/v1/encoder.grpc.pb.cc',
-    'component/encoder/v1/encoder.pb.cc',
-    'component/generic/v1/generic.grpc.pb.cc',
-    'component/generic/v1/generic.pb.cc',
-    'component/motor/v1/motor.grpc.pb.cc',
-    'component/motor/v1/motor.pb.cc',
-    'google/api/annotations.pb.cc',
-    'google/api/httpbody.pb.cc',
-    'google/api/http.pb.cc',
-    'module/v1/module.grpc.pb.cc',
-    'module/v1/module.pb.cc',
-    'robot/v1/robot.grpc.pb.cc',
-    'robot/v1/robot.pb.cc',
-    'service/mlmodel/v1/mlmodel.grpc.pb.cc',
-    'service/mlmodel/v1/mlmodel.pb.cc',
-    'service/motion/v1/motion.grpc.pb.cc',
-    'service/motion/v1/motion.pb.cc',
-    'tagger/v1/tagger.grpc.pb.cc',
-    'tagger/v1/tagger.pb.cc',
-]
-
-generated_header_paths = [
-    'app/v1/app.grpc.pb.h',
-    'app/v1/app.pb.h',
-    'app/v1/robot.grpc.pb.h',
-    'app/v1/robot.pb.h',
-    'common/v1/common.grpc.pb.h',
-    'common/v1/common.pb.h',
-    'component/base/v1/base.grpc.pb.h',
-    'component/base/v1/base.pb.h',
-    'component/board/v1/board.grpc.pb.h',
-    'component/board/v1/board.pb.h',
-    'component/camera/v1/camera.grpc.pb.h',
-    'component/camera/v1/camera.pb.h',
-    'component/encoder/v1/encoder.grpc.pb.h',
-    'component/encoder/v1/encoder.pb.h',
-    'component/generic/v1/generic.grpc.pb.h',
-    'component/generic/v1/generic.pb.h',
-    'component/motor/v1/motor.grpc.pb.h',
-    'component/motor/v1/motor.pb.h',
-    'google/api/annotations.pb.h',
-    'google/api/httpbody.pb.h',
-    'google/api/http.pb.h',
-    'module/v1/module.grpc.pb.h',
-    'module/v1/module.pb.h',
-    'robot/v1/robot.grpc.pb.h',
-    'robot/v1/robot.pb.h',
-    'service/mlmodel/v1/mlmodel.grpc.pb.h',
-    'service/mlmodel/v1/mlmodel.pb.h',
-    'service/motion/v1/motion.grpc.pb.h',
-    'service/motion/v1/motion.pb.h',
-    'tagger/v1/tagger.grpc.pb.h',
-    'tagger/v1/tagger.pb.h',
-]
+generated_source_paths = \
+    """
+    app/packages/v1/packages.pb.cc
+    app/packages/v1/packages.pb.h
+    app/v1/app.grpc.pb.cc
+    app/v1/app.grpc.pb.h
+    app/v1/app.pb.cc
+    app/v1/app.pb.h
+    app/v1/robot.grpc.pb.cc
+    app/v1/robot.grpc.pb.h
+    app/v1/robot.pb.cc
+    app/v1/robot.pb.h
+    common/v1/common.grpc.pb.cc
+    common/v1/common.grpc.pb.h
+    common/v1/common.pb.cc
+    common/v1/common.pb.h
+    component/base/v1/base.grpc.pb.cc
+    component/base/v1/base.grpc.pb.h
+    component/base/v1/base.pb.cc
+    component/base/v1/base.pb.h
+    component/board/v1/board.grpc.pb.cc
+    component/board/v1/board.grpc.pb.h
+    component/board/v1/board.pb.cc
+    component/board/v1/board.pb.h
+    component/camera/v1/camera.grpc.pb.cc
+    component/camera/v1/camera.grpc.pb.h
+    component/camera/v1/camera.pb.cc
+    component/camera/v1/camera.pb.h
+    component/encoder/v1/encoder.grpc.pb.cc
+    component/encoder/v1/encoder.grpc.pb.h
+    component/encoder/v1/encoder.pb.cc
+    component/encoder/v1/encoder.pb.h
+    component/generic/v1/generic.grpc.pb.cc
+    component/generic/v1/generic.grpc.pb.h
+    component/generic/v1/generic.pb.cc
+    component/generic/v1/generic.pb.h
+    component/motor/v1/motor.grpc.pb.cc
+    component/motor/v1/motor.grpc.pb.h
+    component/motor/v1/motor.pb.cc
+    component/motor/v1/motor.pb.h
+    component/movementsensor/v1/movementsensor.grpc.pb.cc
+    component/movementsensor/v1/movementsensor.grpc.pb.h
+    component/movementsensor/v1/movementsensor.pb.cc
+    component/movementsensor/v1/movementsensor.pb.h
+    component/powersensor/v1/powersensor.grpc.pb.cc
+    component/powersensor/v1/powersensor.grpc.pb.h
+    component/powersensor/v1/powersensor.pb.cc
+    component/powersensor/v1/powersensor.pb.h
+    component/sensor/v1/sensor.grpc.pb.cc
+    component/sensor/v1/sensor.grpc.pb.h
+    component/sensor/v1/sensor.pb.cc
+    component/sensor/v1/sensor.pb.h
+    google/api/annotations.pb.cc
+    google/api/annotations.pb.h
+    google/api/httpbody.pb.cc
+    google/api/httpbody.pb.h
+    google/api/http.pb.cc
+    google/api/http.pb.h
+    module/v1/module.grpc.pb.cc
+    module/v1/module.grpc.pb.h
+    module/v1/module.pb.cc
+    module/v1/module.pb.h
+    robot/v1/robot.grpc.pb.cc
+    robot/v1/robot.grpc.pb.h
+    robot/v1/robot.pb.cc
+    robot/v1/robot.pb.h
+    service/mlmodel/v1/mlmodel.grpc.pb.cc
+    service/mlmodel/v1/mlmodel.grpc.pb.h
+    service/mlmodel/v1/mlmodel.pb.cc
+    service/mlmodel/v1/mlmodel.pb.h
+    service/motion/v1/motion.grpc.pb.cc
+    service/motion/v1/motion.grpc.pb.h
+    service/motion/v1/motion.pb.cc
+    service/motion/v1/motion.pb.h
+    tagger/v1/tagger.grpc.pb.cc
+    tagger/v1/tagger.grpc.pb.h
+    tagger/v1/tagger.pb.cc
+    tagger/v1/tagger.pb.h
+    """.split()
 
 if GetOption('viamcppsdk-use-dynamic-protos') == True:
 
@@ -110,7 +124,7 @@ if GetOption('viamcppsdk-use-dynamic-protos') == True:
 
 env.SharedLibrary(
     target='viamapi',
-    source=env.File(generated_source_paths, directory=src_dir),
+    source=env.File([src for src in generated_source_paths if src.endswith('.cc')], directory=src_dir),
     LIBS=[
         'absl_cord',
         'absl_cord_internal',
