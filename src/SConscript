@@ -6,15 +6,12 @@ env = env.Clone()
 
 env.AppendUnique(
     CPPPATH=[
-        '$VARIANT_DIR/src/viam/api/gen',
+        '$DEST_DIR/$PREFIX_INCLUDE_DIR',
+        '$DEST_DIR/$PREFIX_INCLUDE_DIR/viam/api',
         '$VARIANT_DIR/src',
-        '$VARIANT_DIR/src/viam/api/gen/viam/api',
-        '$VARIANT_DIR/src/viam/api',
     ],
     LIBPATH=[
-        '#',
-        '$VARIANT_DIR/src/viam/api',
-        '$VARIANT_DIR/src/viam/sdk',
+        '$DEST_DIR/$PREFIX_LIB_DIR',
     ],
     CPPDEFINES=[
         'BOOST_ALL_DYN_LINK',

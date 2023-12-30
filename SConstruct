@@ -75,6 +75,11 @@ variables.Add(
 )
 
 variables.Add(
+    'DEST_DIR',
+    default='$BUILD_DIR/install',
+)
+
+variables.Add(
     ('PLUS_CPPPATH', '+CPPPATH'),
     default=[],
     converter=shlex.split,
@@ -95,6 +100,21 @@ variables.Add(
 variables.Add(
     'PLATFORM',
     default=None,
+)
+
+variables.Add(
+    'PREFIX',
+    default="/"
+)
+
+variables.Add(
+    'PREFIX_INCLUDE_DIR',
+    default='$PREFIX/include',
+)
+
+variables.Add(
+    'PREFIX_LIB_DIR',
+    default='$PREFIX/lib'
 )
 
 variables.Add(

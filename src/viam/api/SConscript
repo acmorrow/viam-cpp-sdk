@@ -122,7 +122,7 @@ if GetOption('viamcppsdk-use-dynamic-protos') == True:
     )
 
 
-env.SharedLibrary(
+libviamapi = env.SharedLibrary(
     target='viamapi',
     source=env.File([src for src in generated_source_paths if src.endswith('.cc')], directory=src_dir),
     LIBS=[
@@ -139,3 +139,18 @@ env.SharedLibrary(
         'protobuf',
     ]
 )
+
+libviamapi_install = env.Install(
+    target='$DEST_DIR/$PREFIX_LIB_DIR',
+    source=libviamapi,
+)
+
+env.Alias('install', [libviamapi_install])
+
+env = env.Clone(HEADER_ROOT=src_dir.Dir('..').Dir('..'))
+for header in env.File([src for src in generated_source_paths if src.endswith('.h')], directory=src_dir):
+    header_install = env.Install(
+        target=env.subst('$DEST_DIR/$PREFIX_INCLUDE_DIR/${HEADER_ROOT.rel_path(SOURCE.dir)}', source=header),
+        source=header,
+    )
+    env.Alias('install', header_install)
