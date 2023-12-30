@@ -1,28 +1,28 @@
 # -*- mode: python; -*-
 
-Import(['env'])
+Import(["env"])
 
 env = env.Clone()
 
 env.AppendUnique(
     CPPPATH=[
-        '$DEST_DIR/$PREFIX_INCLUDE_DIR',
-        '$DEST_DIR/$PREFIX_INCLUDE_DIR/viam/api',
-        '$VARIANT_DIR/src',
+        "$DEST_DIR/$PREFIX_INCLUDE_DIR",
+        "$DEST_DIR/$PREFIX_INCLUDE_DIR/viam/api",
+        "$VARIANT_DIR/src",
     ],
     LIBPATH=[
-        '$DEST_DIR/$PREFIX_LIB_DIR',
+        "$DEST_DIR/$PREFIX_LIB_DIR",
     ],
     CPPDEFINES=[
-        'BOOST_ALL_DYN_LINK',
-    ]
- )
+        "BOOST_ALL_DYN_LINK",
+    ],
+)
 
 env.SConscript(
     dirs=[
-        'viam',
+        "viam",
     ],
     exports={
-        'env' : env.Clone(),
+        "env": env.Clone(),
     },
 )

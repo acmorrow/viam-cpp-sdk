@@ -1,14 +1,14 @@
 # -*- mode: python; -*-
 
-Import(['env'])
+Import(["env"])
 
 env = env.Clone()
 
 env.SConscript(
     dirs=[
-        'src'
+        "src",
     ],
     exports={
-        'env' : env.Clone(),
+        "env": env.Clone(),
     },
 )

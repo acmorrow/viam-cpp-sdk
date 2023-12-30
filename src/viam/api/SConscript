@@ -1,14 +1,14 @@
 # -*- mode: python; -*-
 
-Import(['env'])
+Import(["env"])
 
 env = env.Clone()
 
 AddOption(
-    '--viamcppsdk-use-dynamic-protos',
+    "--viamcppsdk-use-dynamic-protos",
     dest="viamcppsdk-use-dynamic-protos",
-    nargs='?',
-    type='choice',
+    nargs="?",
+    type="choice",
     choices=[True, False],
     default=False,
     const=True,
@@ -16,10 +16,9 @@ AddOption(
 
 # TODO: Local api generation
 
-src_dir = env.Dir('.')
+src_dir = env.Dir(".")
 
-generated_source_paths = \
-    """
+generated_source_paths = """
     app/packages/v1/packages.pb.cc
     app/packages/v1/packages.pb.h
     app/v1/app.grpc.pb.cc
@@ -98,15 +97,14 @@ generated_source_paths = \
     tagger/v1/tagger.pb.h
     """.split()
 
-if GetOption('viamcppsdk-use-dynamic-protos') == True:
-
-    src_dir = env.Dir('gen/viam/api')
+if GetOption("viamcppsdk-use-dynamic-protos") == True:
+    src_dir = env.Dir("gen/viam/api")
 
     buf_yaml = env.Substfile(
-        target='config/buf.gen.yaml',
-        source='config/buf.gen.remote.plugin.yaml.in',
+        target="config/buf.gen.yaml",
+        source="config/buf.gen.remote.plugin.yaml.in",
         SUBST_DICT={
-            '@VIAMCPPSDK_GRPCXX_VERSION@' : '1.59.1',
+            "@VIAMCPPSDK_GRPCXX_VERSION@": "1.59.1",
         },
     )
 
@@ -114,43 +112,51 @@ if GetOption('viamcppsdk-use-dynamic-protos') == True:
         source=buf_yaml,
         target=env.File(generated_source_paths, directory=src_dir),
         action=[
-            '$BUF generate buf.build/viamrobotics/goutils --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}',
-            '$BUF generate buf.build/googleapis/googleapis  --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR} --path google/rpc --path google/api',
-            '$BUF generate buf.build/viamrobotics/api --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}',
+            "$BUF generate buf.build/viamrobotics/goutils --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}",
+            "$BUF generate buf.build/googleapis/googleapis  --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR} --path google/rpc --path google/api",
+            "$BUF generate buf.build/viamrobotics/api --template ${SOURCES[0]} --output ${BUF_OUTPUT_DIR}",
         ],
-        BUF_OUTPUT_DIR=env.Dir('.'),
+        BUF_OUTPUT_DIR=env.Dir("."),
     )
 
 
 libviamapi = env.SharedLibrary(
-    target='viamapi',
-    source=env.File([src for src in generated_source_paths if src.endswith('.cc')], directory=src_dir),
+    target="viamapi",
+    source=env.File(
+        [src for src in generated_source_paths if src.endswith(".cc")],
+        directory=src_dir,
+    ),
     LIBS=[
-        'absl_cord',
-        'absl_cord_internal',
-        'absl_cordz_info',
-        'absl_hash',
-        'absl_log_internal_check_op',
-        'absl_log_internal_message',
-        'absl_log_internal_nullguard',
-        'gpr',
-        'grpc',
-        'grpc++',
-        'protobuf',
-    ]
+        "absl_cord",
+        "absl_cord_internal",
+        "absl_cordz_info",
+        "absl_hash",
+        "absl_log_internal_check_op",
+        "absl_log_internal_message",
+        "absl_log_internal_nullguard",
+        "gpr",
+        "grpc",
+        "grpc++",
+        "protobuf",
+    ],
 )
 
 libviamapi_install = env.Install(
-    target='$DEST_DIR/$PREFIX_LIB_DIR',
+    target="$DEST_DIR/$PREFIX_LIB_DIR",
     source=libviamapi,
 )
 
-env.Alias('install', [libviamapi_install])
+env.Alias("install", [libviamapi_install])
 
-env = env.Clone(HEADER_ROOT=src_dir.Dir('..').Dir('..'))
-for header in env.File([src for src in generated_source_paths if src.endswith('.h')], directory=src_dir):
+env = env.Clone(HEADER_ROOT=src_dir.Dir("..").Dir(".."))
+for header in env.File(
+    [src for src in generated_source_paths if src.endswith(".h")], directory=src_dir
+):
     header_install = env.Install(
-        target=env.subst('$DEST_DIR/$PREFIX_INCLUDE_DIR/${HEADER_ROOT.rel_path(SOURCE.dir)}', source=header),
+        target=env.subst(
+            "$DEST_DIR/$PREFIX_INCLUDE_DIR/${HEADER_ROOT.rel_path(SOURCE.dir)}",
+            source=header,
+        ),
         source=header,
     )
-    env.Alias('install', header_install)
+    env.Alias("install", header_install)

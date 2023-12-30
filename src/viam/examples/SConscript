@@ -1,19 +1,19 @@
 # -*- mode: python; -*-
 
-Import(['env'])
+Import(["env"])
 
 env = env.Clone()
 
 env.SConscript(
     dirs=[
-#        'dial',
-#        'dial_api_key',
-#        'modules',
-#        'mlmodel',
-        'motor',
-#        'camera',
+        # 'dial',
+        # 'dial_api_key',
+        # 'modules',
+        # 'mlmodel',
+        "motor",
+        # 'camera',
     ],
     exports={
-        'env' : env.Clone(),
+        "env": env.Clone(),
     },
 )

@@ -16,7 +16,7 @@ EnsureSConsVersion(4, 5)
 
 # --variants-paths=p1,p2...pn
 # --variants=a,b,c
-# 
+#
 
 #
 # SCons options are set here.
@@ -25,8 +25,7 @@ EnsureSConsVersion(4, 5)
 # Always randomize build order, to shake out dependency issues and to
 # avoid racing on the cache when two builders are building
 # concurrently but sharing a cache.
-SetOption('random', 1)
-
+SetOption("random", 1)
 
 
 #
@@ -35,118 +34,112 @@ SetOption('random', 1)
 #
 
 # TODO: Variable Files!
-variables = Variables(
-    args=ARGUMENTS
+variables = Variables(args=ARGUMENTS)
+
+variables.Add(
+    "BUF",
+    default=WhereIs("buf"),
 )
 
 variables.Add(
-    'BUF',
-    default=WhereIs('buf'),
+    "BUILD_DIR",
+    default="#/build",
 )
 
 variables.Add(
-    'BUILD_DIR',
-    default='#/build',
+    "CACHE_DIR",
+    default="$SCONS_DIR/cache",
 )
 
 variables.Add(
-    'CACHE_DIR',
-    default='$SCONS_DIR/cache',
-)
-
-variables.Add(
-    'CCFLAGS',
+    "CCFLAGS",
     converter=shlex.split,
 )
 
 variables.Add(
-    'CFLAGS',
+    "CFLAGS",
     converter=shlex.split,
 )
 
 variables.Add(
-    'CXXFLAGS',
+    "CXXFLAGS",
     converter=shlex.split,
 )
 
 variables.Add(
-    'CPPPATH',
+    "CPPPATH",
     converter=shlex.split,
 )
 
 variables.Add(
-    'DEST_DIR',
-    default='$BUILD_DIR/install',
+    "DEST_DIR",
+    default="$BUILD_DIR/install",
 )
 
 variables.Add(
-    ('PLUS_CPPPATH', '+CPPPATH'),
+    ("PLUS_CPPPATH", "+CPPPATH"),
     default=[],
     converter=shlex.split,
 )
 
 variables.Add(
-    ('CPPPATH_PLUS', 'CPPPATH+'),
+    ("CPPPATH_PLUS", "CPPPATH+"),
     default=[],
     converter=shlex.split,
 )
 
 variables.Add(
-    'LIBPATH',
+    "LIBPATH",
     default=None,
     converter=shlex.split,
 )
 
 variables.Add(
-    'PLATFORM',
+    "PLATFORM",
     default=None,
 )
 
+variables.Add("PREFIX", default="/")
+
 variables.Add(
-    'PREFIX',
-    default="/"
+    "PREFIX_BIN_DIR",
+    default="$PREFIX/bin",
 )
 
 variables.Add(
-    'PREFIX_BIN_DIR',
-    default='$PREFIX/bin',
+    "PREFIX_INCLUDE_DIR",
+    default="$PREFIX/include",
 )
 
 variables.Add(
-    'PREFIX_INCLUDE_DIR',
-    default='$PREFIX/include',
+    "PREFIX_LIB_DIR",
+    default="$PREFIX/lib",)
+
+variables.Add(
+    "SCONS_DIR",
+    default="$BUILD_DIR/scons",
 )
 
 variables.Add(
-    'PREFIX_LIB_DIR',
-    default='$PREFIX/lib'
+    "TOOLS",
+    converter=lambda x: ["predefault"] + shlex.split(x) + ["postdefault"],
+    default=["default"],
 )
 
 variables.Add(
-    'SCONS_DIR',
-    default='$BUILD_DIR/scons',
-)
-
-variables.Add(
-    'TOOLS',
-    converter=lambda x: ['predefault'] + shlex.split(x) + ['postdefault'],
-    default=['default']
-)
-
-variables.Add(
-    ('PREDEFAULT_TOOLS', '+TOOLS'),
+    ("PREDEFAULT_TOOLS", "+TOOLS"),
     converter=shlex.split,
     default=[],
 )
 
 variables.Add(
-    ('POSTDEFAULT_TOOLS', 'TOOLS+'),
+    ("POSTDEFAULT_TOOLS", "TOOLS+"),
     converter=shlex.split,
     default=[],
 )
 
 variables.Add(
-    'VARIANT',
+    "VARIANT",
     default=None,
 )
 
@@ -157,17 +150,17 @@ variables.Add(
 
 env = Environment(
     variables=variables,
-    VARIANT_DIR='$BUILD_DIR/variants/$VARIANT',
+    VARIANT_DIR="$BUILD_DIR/variants/$VARIANT",
 )
 
 # Apply any PLUS_ or _PLUS variables, per our convention
 fixup = env.Clone()
-for k,v in env.items():
-    if k.startswith('PLUS_'):
-        fixup.Prepend(**{k[len('PLUS_'):] : v})
+for k, v in env.items():
+    if k.startswith("PLUS_"):
+        fixup.Prepend(**{k[len("PLUS_") :]: v})
         del fixup[k]
-    elif k.endswith('_PLUS'):
-        fixup.Append(**{k[:len('_PLUS')] : v})
+    elif k.endswith("_PLUS"):
+        fixup.Append(**{k[: len("_PLUS")]: v})
         del fixup[k]
 env = fixup
 
@@ -176,8 +169,8 @@ env = fixup
 # SCons configuration goes here
 #
 
-env.SConsignFile('${__env__.Dir(SCONS_DIR)}/sconsign')
-env.CacheDir('${__env__.Dir(CACHE_DIR)}')
+env.SConsignFile("${__env__.Dir(SCONS_DIR)}/sconsign")
+env.CacheDir("${__env__.Dir(CACHE_DIR)}")
 
 
 #
@@ -186,11 +179,11 @@ env.CacheDir('${__env__.Dir(CACHE_DIR)}')
 
 env.SConscript(
     dirs=[
-        '.',
+        ".",
     ],
     duplicate=False,
     exports={
-        'env' : env.Clone(),
+        "env": env.Clone(),
     },
-    variant_dir='$VARIANT_DIR',
+    variant_dir="$VARIANT_DIR",
 )
