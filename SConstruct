@@ -113,7 +113,8 @@ variables.Add(
 
 variables.Add(
     "PREFIX_LIB_DIR",
-    default="$PREFIX/lib",)
+    default="$PREFIX/lib",
+)
 
 variables.Add(
     "SCONS_DIR",
