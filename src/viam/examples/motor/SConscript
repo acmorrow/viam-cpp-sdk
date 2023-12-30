@@ -1,0 +1,22 @@
+# -*- mode: python; -*-
+
+Import(['env'])
+
+env = env.Clone()
+
+example_motor = env.Program(
+    target='example_motor',
+    source='example_motor.cpp',
+    LIBS=[
+        'viamsdk',
+        'viamapi',
+        'protobuf',
+    ],
+)
+
+example_motor_install = env.Install(
+    target='$DEST_DIR/$PREFIX_BIN_DIR',
+    source=example_motor,
+)
+
+env.Alias('install', example_motor_install)

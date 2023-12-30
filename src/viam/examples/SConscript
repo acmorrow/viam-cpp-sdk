@@ -6,9 +6,12 @@ env = env.Clone()
 
 env.SConscript(
     dirs=[
-        'api',
-        'examples',
-        'sdk',
+#        'dial',
+#        'dial_api_key',
+#        'modules',
+#        'mlmodel',
+        'motor',
+#        'camera',
     ],
     exports={
         'env' : env.Clone(),

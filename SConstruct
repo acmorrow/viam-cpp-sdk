@@ -108,6 +108,11 @@ variables.Add(
 )
 
 variables.Add(
+    'PREFIX_BIN_DIR',
+    default='$PREFIX/bin',
+)
+
+variables.Add(
     'PREFIX_INCLUDE_DIR',
     default='$PREFIX/include',
 )
