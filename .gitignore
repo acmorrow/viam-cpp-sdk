@@ -12,3 +12,6 @@
 
 # ignore doxygen output
 /etc/docs/api/*
+
+# Python cache files
+/**/__pycache__
