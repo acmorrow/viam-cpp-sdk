@@ -115,3 +115,185 @@ BOOST_AUTO_TEST_SUITE_END()
 
 }  // namespace sdktests
 }  // namespace viam
+#if 0
+namespace magic {
+
+struct object_tag;
+struct array_tag;
+
+template <typename T>
+struct recursive_variant_wrapper_traits;
+
+template <typename T>
+class recursive_variant_wrapper {
+   public:
+    using type = typename recursive_variant_wrapper_traits<T>::type;
+
+    recursive_variant_wrapper() = delete;
+
+    recursive_variant_wrapper(const type& t) : impl_(std::make_unique<type>(t)) {}
+
+    recursive_variant_wrapper(type&& t) : impl_(std::make_unique<type>(std::move(t))) {}
+
+    template <typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
+    recursive_variant_wrapper(U&& u) : impl_(std::make_unique<type>(std::forward<U>(u))) {}
+
+    recursive_variant_wrapper(const recursive_variant_wrapper& other)
+        : impl_(std::make_unique<type>(*other.impl_)) {}
+
+    template <typename U>
+    recursive_variant_wrapper(const recursive_variant_wrapper<U>& other)
+        : impl_(std::make_unique<type>(*other.impl_)) {}
+
+    recursive_variant_wrapper(recursive_variant_wrapper&& other) noexcept(false)
+        : impl_(std::make_unique<type>(std::move(*other.impl_))) {}
+
+    template <typename U>
+    recursive_variant_wrapper(recursive_variant_wrapper<U>&& other)
+        : impl_(std::make_unique<type>(std::move(*other.impl_))) {}
+
+    recursive_variant_wrapper& operator=(const type& t) {
+        *impl_ = t;
+        return *this;
+    }
+
+    recursive_variant_wrapper& operator=(type&& t) {
+        *impl_ = std::move(t);
+        return *this;
+    }
+
+    template <typename U, typename = std::enable_if_t<std::is_convertible<U, T>::value>>
+    recursive_variant_wrapper& operator=(U&& u) {
+        *impl_ = std::forward<U>(u);
+        return *this;
+    }
+
+    recursive_variant_wrapper& operator=(const recursive_variant_wrapper& other) {
+        if (this != &other) {
+            *impl_ = *other._impl;
+        }
+        return *this;
+    }
+
+    template <typename U>
+    recursive_variant_wrapper& operator=(const recursive_variant_wrapper<U>& other) {
+        *impl_ = *other._impl;
+        return *this;
+    }
+
+    recursive_variant_wrapper& operator=(recursive_variant_wrapper&& other) noexcept {
+        *impl_ = std::move(*other._impl);
+    }
+
+    template <typename U>
+    recursive_variant_wrapper& operator=(recursive_variant_wrapper<U>&& other) {
+        *impl_ = std::move(*other._impl);
+        return *this;
+    }
+
+    operator type&() & {
+        return *impl_;
+    };
+
+    operator const type&() const& {
+        return *impl_;
+    }
+
+    operator type&&() && {
+      return std::move(*impl_);
+    }
+
+    void swap(recursive_variant_wrapper& other) noexcept {
+      impl_.swap(other._impl);
+    }
+
+    friend void swap(recursive_variant_wrapper& l, recursive_variant_wrapper& r) noexcept {
+        l.swap(r);
+    }
+
+   private:
+    std::unique_ptr<type> impl_;
+};
+
+using value = std::variant<int,
+                           bool,
+                           std::string,
+                           recursive_variant_wrapper<array_tag>,
+                           recursive_variant_wrapper<object_tag>>;
+
+template <>
+struct recursive_variant_wrapper_traits<object_tag> {
+    using type = std::unordered_map<std::string, value>;
+};
+
+template <>
+struct recursive_variant_wrapper_traits<array_tag> {
+    using type = std::vector<value>;
+};
+
+using object = recursive_variant_wrapper_traits<object_tag>::type;
+using array = recursive_variant_wrapper_traits<array_tag>::type;
+
+template <typename V>
+class recursive_variant_wrapper_visitor {
+   public:
+    recursive_variant_wrapper_visitor(V&& v) : v_(std::move(v)) {}
+    recursive_variant_wrapper_visitor(const V& v) : v_(v) {}
+
+    template <typename T>
+    decltype(auto) operator()(T&& t) {
+        return v_(std::forward<decltype(t)>(t));
+    }
+
+    template <typename T>
+    decltype(auto) operator()(recursive_variant_wrapper<T>& t) {
+        return v_(t);
+    }
+
+    template <typename T>
+    decltype(auto) operator()(const recursive_variant_wrapper<T>& t) {
+        return v_(t);
+    }
+
+    template <typename T>
+    decltype(auto) operator()(recursive_variant_wrapper<T>&& t) {
+        return v_(std::move(t));
+    }
+
+   private:
+    V v_;
+};
+
+void testme() {
+    object o;
+    o.insert({"key", 42});
+
+    object o2;
+    o.insert({"key2", std::move(o2)});
+
+    o.insert({"stringy", "McStringString"});
+
+    o.insert({"false", false});
+    o.insert({"true", true});
+
+
+    std::string x;
+
+    struct visitor {
+      visitor(std::string* x) : x{x} {}
+      std::string* x;
+        void operator()(int&&) {}
+        void operator()(bool&&) {}
+      void operator()(std::string&& xx) { *x = std::move(xx); }
+        void operator()(object&&) {}
+        void operator()(array&& a) {}
+    };
+
+    value v{std::move(o)};
+    std::visit(visitor{&x}, std::move(v));
+
+    auto xx = std::get<object>(v);
+}
+
+}  // namespace magic
+#endif
