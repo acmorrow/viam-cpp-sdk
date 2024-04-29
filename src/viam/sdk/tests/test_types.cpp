@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 }  // namespace sdktests
 }  // namespace viam
-#if 0
+
 namespace magic {
 
 struct object_tag;
@@ -234,35 +234,6 @@ struct recursive_variant_wrapper_traits<array_tag> {
 using object = recursive_variant_wrapper_traits<object_tag>::type;
 using array = recursive_variant_wrapper_traits<array_tag>::type;
 
-template <typename V>
-class recursive_variant_wrapper_visitor {
-   public:
-    recursive_variant_wrapper_visitor(V&& v) : v_(std::move(v)) {}
-    recursive_variant_wrapper_visitor(const V& v) : v_(v) {}
-
-    template <typename T>
-    decltype(auto) operator()(T&& t) {
-        return v_(std::forward<decltype(t)>(t));
-    }
-
-    template <typename T>
-    decltype(auto) operator()(recursive_variant_wrapper<T>& t) {
-        return v_(t);
-    }
-
-    template <typename T>
-    decltype(auto) operator()(const recursive_variant_wrapper<T>& t) {
-        return v_(t);
-    }
-
-    template <typename T>
-    decltype(auto) operator()(recursive_variant_wrapper<T>&& t) {
-        return v_(std::move(t));
-    }
-
-   private:
-    V v_;
-};
 
 void testme() {
     object o;
@@ -276,24 +247,10 @@ void testme() {
     o.insert({"false", false});
     o.insert({"true", true});
 
-
     std::string x;
 
-    struct visitor {
-      visitor(std::string* x) : x{x} {}
-      std::string* x;
-        void operator()(int&&) {}
-        void operator()(bool&&) {}
-      void operator()(std::string&& xx) { *x = std::move(xx); }
-        void operator()(object&&) {}
-        void operator()(array&& a) {}
-    };
-
     value v{std::move(o)};
-    std::visit(visitor{&x}, std::move(v));
-
     auto xx = std::get<object>(v);
 }
 
 }  // namespace magic
-#endif
